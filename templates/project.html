@@ -42,12 +42,38 @@
     <span style="border-left: 1px solid var(--border); margin: 0 4px;"></span>
     <button class="btn btn-sm btn-secondary" onclick="toggleAll(true)">Expand All</button>
     <button class="btn btn-sm btn-secondary" onclick="toggleAll(false)">Collapse All</button>
+    <span style="border-left: 1px solid var(--border); margin: 0 4px;"></span>
+    <label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 0.85rem;">
+        <input type="checkbox" class="bulk-check" id="select-all" onchange="toggleSelectAll(this.checked)"> Select All
+    </label>
+</div>
+
+<div class="bulk-bar" id="bulk-bar" style="display: none;">
+    <span class="bulk-count" id="bulk-count">0 test(s) selected</span>
+    <form method="POST" action="{{ url_for('bulk_action', project_id=project['id']) }}" id="bulk-form" style="display: contents;">
+        <input type="hidden" name="test_ids" id="bulk-test-ids">
+        <input type="hidden" name="action" id="bulk-action-field">
+        <input type="hidden" name="assign_to" id="bulk-assign-to">
+        <button type="button" class="btn btn-sm" style="background: var(--badge-pass-text); color: #fff;" onclick="submitBulk('pass')">Mark Pass</button>
+        <button type="button" class="btn btn-sm" style="background: var(--badge-fail-text); color: #fff;" onclick="submitBulk('fail')">Mark Fail</button>
+        <button type="button" class="btn btn-sm btn-secondary" onclick="submitBulk('pending')">Mark Pending</button>
+        <select id="bulk-assign-select" style="padding: 4px 8px; border: 1px solid var(--input-border); border-radius: 6px; font-size: 0.8rem; background: var(--input-bg); color: var(--input-text);"
+                onchange="if(this.value!==''){submitBulkAssign(this.value)}">
+            <option value="">Assign to...</option>
+            <option value="__unassign__">Unassigned</option>
+            {% for u in users %}
+                <option value="{{ u['username'] }}">{{ u['username'] }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" class="btn btn-sm btn-danger" onclick="submitBulk('delete')">Delete Selected</button>
+    </form>
 </div>
 
 {% if tests %}
     {% for test in tests %}
     <div class="card" data-test-id="{{ test['id'] }}">
         <div class="test-header">
+            <input type="checkbox" class="bulk-check test-check" value="{{ test['id'] }}" onchange="updateBulkBar()">
             <div class="test-summary" onclick="toggleTest({{ test['id'] }})">
                 {% if test['passed'] == 1 %}
                     <span class="badge badge-pass">Pass</span>
@@ -232,6 +258,42 @@ function toggleAll(expand) {
             sessionStorage.removeItem('test-' + id);
         }
     });
+}
+function updateBulkBar() {
+    var checks = document.querySelectorAll('.test-check:checked');
+    var bar = document.getElementById('bulk-bar');
+    var countEl = document.getElementById('bulk-count');
+    var selectAll = document.getElementById('select-all');
+    var allChecks = document.querySelectorAll('.test-check');
+    if (checks.length > 0) {
+        bar.style.display = 'flex';
+        countEl.textContent = checks.length + ' test(s) selected';
+    } else {
+        bar.style.display = 'none';
+    }
+    selectAll.checked = allChecks.length > 0 && checks.length === allChecks.length;
+}
+function toggleSelectAll(checked) {
+    document.querySelectorAll('.test-check').forEach(function(cb) { cb.checked = checked; });
+    updateBulkBar();
+}
+function submitBulk(action) {
+    var checks = document.querySelectorAll('.test-check:checked');
+    if (checks.length === 0) return;
+    if (action === 'delete' && !confirm('Delete ' + checks.length + ' selected test(s)?')) return;
+    var ids = Array.from(checks).map(function(cb) { return cb.value; }).join(',');
+    document.getElementById('bulk-test-ids').value = ids;
+    document.getElementById('bulk-action-field').value = action;
+    document.getElementById('bulk-form').submit();
+}
+function submitBulkAssign(val) {
+    var checks = document.querySelectorAll('.test-check:checked');
+    if (checks.length === 0) { document.getElementById('bulk-assign-select').value = ''; return; }
+    var ids = Array.from(checks).map(function(cb) { return cb.value; }).join(',');
+    document.getElementById('bulk-test-ids').value = ids;
+    document.getElementById('bulk-action-field').value = 'assign';
+    document.getElementById('bulk-assign-to').value = val === '__unassign__' ? '' : val;
+    document.getElementById('bulk-form').submit();
 }
 (function() {
     document.querySelectorAll('.test-body').forEach(function(el) {

@@ -658,6 +658,87 @@ def export_project(project_id):
     )
 
 
+@app.route("/projects/<int:project_id>/bulk", methods=["POST"])
+@login_required
+def bulk_action(project_id):
+    conn = get_db()
+    project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if not project:
+        conn.close()
+        return "Project not found", 404
+    test_ids_str = request.form.get("test_ids", "")
+    action = request.form.get("action", "")
+    if not test_ids_str or not action:
+        conn.close()
+        return redirect(url_for("project_detail", project_id=project_id))
+    test_ids = [int(x) for x in test_ids_str.split(",") if x.strip().isdigit()]
+    if not test_ids:
+        conn.close()
+        return redirect(url_for("project_detail", project_id=project_id))
+    placeholders = ",".join("?" * len(test_ids))
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    status_map = {1: "Pass", 0: "Fail", None: "Pending"}
+
+    if action in ("pass", "fail", "pending"):
+        new_passed = {"pass": 1, "fail": 0, "pending": None}[action]
+        tests = conn.execute(
+            f"SELECT id, passed FROM tests WHERE id IN ({placeholders}) AND project_id = ?",
+            test_ids + [project_id],
+        ).fetchall()
+        changed = 0
+        for t in tests:
+            if t["passed"] != new_passed:
+                conn.execute(
+                    "INSERT INTO test_history (test_id, old_status, new_status, changed_by) VALUES (?, ?, ?, ?)",
+                    (t["id"], status_map.get(t["passed"]), status_map.get(new_passed), g.user["username"]),
+                )
+                changed += 1
+        conn.execute(
+            f"UPDATE tests SET passed = ?, executed_by = ?, executed_at = ? "
+            f"WHERE id IN ({placeholders}) AND project_id = ?",
+            [new_passed, g.user["username"], now] + test_ids + [project_id],
+        )
+        conn.commit()
+        label = status_map[new_passed]
+        app.logger.info("Bulk %s: %d test(s) in project %s by %s", label, len(test_ids), project_id, g.user["username"])
+        flash("Marked %d test(s) as %s." % (len(test_ids), label))
+
+    elif action == "assign":
+        assign_to = request.form.get("assign_to", "")
+        conn.execute(
+            f"UPDATE tests SET assigned_to = ? WHERE id IN ({placeholders}) AND project_id = ?",
+            [assign_to] + test_ids + [project_id],
+        )
+        conn.commit()
+        label = assign_to or "Unassigned"
+        app.logger.info("Bulk assign '%s': %d test(s) in project %s by %s", label, len(test_ids), project_id, g.user["username"])
+        flash("Assigned %d test(s) to %s." % (len(test_ids), label))
+
+    elif action == "delete":
+        # clean up attachment files
+        rows = conn.execute(
+            f"SELECT stored_name FROM attachments WHERE test_id IN ({placeholders})",
+            test_ids,
+        ).fetchall()
+        for row in rows:
+            path = os.path.join(UPLOAD_DIR, row["stored_name"])
+            if os.path.exists(path):
+                os.remove(path)
+        conn.execute(f"DELETE FROM test_comments WHERE test_id IN ({placeholders})", test_ids)
+        conn.execute(f"DELETE FROM test_history WHERE test_id IN ({placeholders})", test_ids)
+        conn.execute(f"DELETE FROM attachments WHERE test_id IN ({placeholders})", test_ids)
+        conn.execute(
+            f"DELETE FROM tests WHERE id IN ({placeholders}) AND project_id = ?",
+            test_ids + [project_id],
+        )
+        conn.commit()
+        app.logger.info("Bulk delete: %d test(s) in project %s by %s", len(test_ids), project_id, g.user["username"])
+        flash("Deleted %d test(s)." % len(test_ids))
+
+    conn.close()
+    return redirect(url_for("project_detail", project_id=project_id))
+
+
 @app.route("/projects/<int:project_id>/import", methods=["POST"])
 @login_required
 def import_tests(project_id):
