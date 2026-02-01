@@ -86,6 +86,7 @@
             <div class="header-right">
                 <a href="{{ url_for('index') }}">All Projects</a>
                 {% if g.user %}
+                    <a href="{{ url_for('search') }}">Search</a>
                     {% if g.user['is_admin'] %}
                         <a href="{{ url_for('user_list') }}">Manage Users</a>
                     {% endif %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Search - Test Repository{% endblock %}
+{% block content %}
+<h2>Search Tests</h2>
+
+<div class="card">
+    <form method="GET" action="{{ url_for('search') }}">
+        <div style="display: flex; gap: 8px;">
+            <input type="text" name="q" value="{{ q }}" placeholder="Search descriptions, steps, or output" autofocus style="margin-bottom: 0; flex: 1;">
+            <button type="submit" class="btn btn-primary">Search</button>
+        </div>
+    </form>
+</div>
+
+{% if q %}
+    <p style="color: #6b7280; margin-bottom: 16px;">{{ results|length }} result{{ 's' if results|length != 1 }} for "{{ q }}"</p>
+
+    {% for test in results %}
+    <div class="card">
+        <div class="test-header">
+            <div>
+                {% if test['passed'] == 1 %}
+                    <span class="badge badge-pass">Pass</span>
+                {% elif test['passed'] == 0 %}
+                    <span class="badge badge-fail">Fail</span>
+                {% else %}
+                    <span class="badge badge-pending">Pending</span>
+                {% endif %}
+                <a href="{{ url_for('project_detail', project_id=test['project_id']) }}" style="margin-left: 8px; font-size: 0.85rem;">{{ test['project_name'] }}</a>
+            </div>
+        </div>
+        <h3 style="font-size: 1rem; margin-bottom: 4px;">{{ test['description'] }}</h3>
+        <div class="meta">
+            {% if test['created_by'] %}<span>Created by: <strong>{{ test['created_by'] }}</strong></span>{% endif %}
+            {% if test['executed_by'] %}<span>Executed by: <strong>{{ test['executed_by'] }}</strong>{% if test['executed_at'] %} on {{ test['executed_at'] }}{% endif %}</span>{% endif %}
+        </div>
+        {% if test['steps'] %}
+            <div style="font-size: 0.9rem; color: #4b5563; margin-top: 8px; white-space: pre-wrap;">{{ test['steps'][:300] }}{% if test['steps']|length > 300 %}...{% endif %}</div>
+        {% endif %}
+        {% if test['output'] %}
+            <div class="output-block" style="margin-top: 8px;">{{ test['output'][:300] }}{% if test['output']|length > 300 %}...{% endif %}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+{% endif %}
+{% endblock %}

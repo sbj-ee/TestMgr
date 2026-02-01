@@ -197,6 +197,24 @@ def logout():
 
 # --- App routes ---
 
+@app.route("/search")
+@login_required
+def search():
+    q = request.args.get("q", "").strip()
+    results = []
+    if q:
+        conn = get_db()
+        results = conn.execute(
+            "SELECT t.*, p.name AS project_name FROM tests t "
+            "JOIN projects p ON t.project_id = p.id "
+            "WHERE t.description LIKE ? OR t.steps LIKE ? OR t.output LIKE ? "
+            "ORDER BY p.name, t.sort_order",
+            (f"%{q}%", f"%{q}%", f"%{q}%"),
+        ).fetchall()
+        conn.close()
+    return render_template("search.html", q=q, results=results)
+
+
 @app.route("/")
 @login_required
 def index():
