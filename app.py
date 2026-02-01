@@ -1,6 +1,6 @@
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    send_from_directory, session, g, Response,
+    send_from_directory, session, g, Response, flash,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from logging.handlers import RotatingFileHandler
@@ -343,6 +343,7 @@ def create_project():
         conn.commit()
         conn.close()
         app.logger.info("Project created: '%s' by %s", name, g.user["username"])
+        flash("Project created.")
     return redirect(url_for("index"))
 
 
@@ -427,6 +428,7 @@ def delete_project(project_id):
     conn.commit()
     conn.close()
     app.logger.info("Project deleted: id=%s by %s", project_id, g.user["username"])
+    flash("Project deleted.")
     return redirect(url_for("index"))
 
 
@@ -469,6 +471,7 @@ def clone_project(project_id):
     conn.commit()
     conn.close()
     app.logger.info("Project cloned: '%s' -> id=%s by %s", project["name"], new_project_id, g.user["username"])
+    flash("Project cloned.")
     return redirect(url_for("project_detail", project_id=new_project_id))
 
 
@@ -486,6 +489,7 @@ def archive_project(project_id):
     conn.close()
     action = "archived" if new_val else "unarchived"
     app.logger.info("Project %s: '%s' by %s", action, project["name"], g.user["username"])
+    flash("Project %s." % action)
     return redirect(url_for("index"))
 
 
@@ -671,6 +675,7 @@ def create_test(project_id):
         conn.commit()
         conn.close()
         app.logger.info("Test created: '%s' in project %s by %s", description, project_id, g.user["username"])
+        flash("Test added.")
     return redirect(url_for("project_detail", project_id=project_id))
 
 
@@ -755,8 +760,10 @@ def update_test(test_id):
         status_labels = {1: "Pass", 0: "Fail", None: "Pending"}
         app.logger.info("Test status changed: id=%s %s->%s by %s", test_id,
                         status_labels.get(test["passed"]), status_labels.get(passed), g.user["username"])
+        flash("Test saved. Status changed to %s." % status_labels.get(passed))
     else:
         app.logger.info("Test updated: id=%s by %s", test_id, g.user["username"])
+        flash("Test saved.")
     return redirect(url_for("project_detail", project_id=project_id))
 
 
@@ -782,6 +789,7 @@ def delete_test(test_id):
     conn.commit()
     conn.close()
     app.logger.info("Test deleted: id=%s by %s", test_id, g.user["username"])
+    flash("Test deleted.")
     return redirect(url_for("project_detail", project_id=project_id))
 
 
@@ -804,6 +812,7 @@ def upload_attachment(test_id):
         )
         conn.commit()
         app.logger.info("Attachment uploaded: '%s' on test %s by %s", file.filename, test_id, g.user["username"])
+        flash("Attachment uploaded.")
     conn.close()
     return redirect(url_for("project_detail", project_id=test["project_id"]))
 
@@ -824,6 +833,7 @@ def add_comment(test_id):
         )
         conn.commit()
         app.logger.info("Comment added on test %s by %s", test_id, g.user["username"])
+        flash("Comment added.")
     conn.close()
     return redirect(url_for("project_detail", project_id=test["project_id"]))
 
@@ -845,6 +855,7 @@ def delete_comment(comment_id):
     conn.commit()
     conn.close()
     app.logger.info("Comment deleted: id=%s by %s", comment_id, g.user["username"])
+    flash("Comment deleted.")
     return redirect(url_for("project_detail", project_id=test["project_id"]))
 
 
@@ -875,6 +886,7 @@ def delete_attachment(attachment_id):
     conn.commit()
     conn.close()
     app.logger.info("Attachment deleted: '%s' (id=%s) by %s", att["original_name"], attachment_id, g.user["username"])
+    flash("Attachment removed.")
     return redirect(url_for("project_detail", project_id=test["project_id"]))
 
 
@@ -912,6 +924,7 @@ def add_user():
             conn.commit()
             conn.close()
             app.logger.info("User added: '%s' (admin=%s) by %s", username, is_admin, g.user["username"])
+            flash("User added.")
             return redirect(url_for("user_list"))
     # re-render with error
     conn = get_db()
@@ -932,6 +945,7 @@ def toggle_admin(user_id):
         conn.execute("UPDATE users SET is_admin = ? WHERE id = ?", (new_val, user_id))
         conn.commit()
         app.logger.info("Admin toggled: '%s' admin=%s by %s", user["username"], new_val, g.user["username"])
+        flash("Admin role updated.")
     conn.close()
     return redirect(url_for("user_list"))
 
@@ -949,6 +963,7 @@ def reset_password(user_id):
         conn.commit()
         conn.close()
         app.logger.info("Password reset: user_id=%s by %s", user_id, g.user["username"])
+        flash("Password reset.")
     return redirect(url_for("user_list"))
 
 
@@ -963,6 +978,7 @@ def delete_user(user_id):
     conn.commit()
     conn.close()
     app.logger.info("User deleted: '%s' (id=%s) by %s", user["username"] if user else "unknown", user_id, g.user["username"])
+    flash("User deleted.")
     return redirect(url_for("user_list"))
 
 

@@ -149,6 +149,21 @@
 
         .theme-toggle { background: none; border: 1px solid var(--header-link); color: var(--header-link); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
         .theme-toggle:hover { color: var(--header-text); border-color: var(--header-text); }
+
+        .test-body.collapsed { display: none; }
+        .test-summary { display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; min-width: 0; }
+        .test-summary .desc-preview { font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .test-summary .meta-preview { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+        .toggle-btn { background: none; border: 1px solid var(--input-border); color: var(--muted); padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; white-space: nowrap; }
+        .toggle-btn:hover { color: var(--text); border-color: var(--text); }
+
+        .flash-container { margin-bottom: 16px; }
+        .flash-msg {
+            padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; font-size: 0.9rem;
+            display: flex; justify-content: space-between; align-items: center;
+            background: var(--badge-pass-bg); color: var(--badge-pass-text);
+        }
+        .flash-msg .flash-close { background: none; border: none; cursor: pointer; font-size: 1.1rem; color: inherit; padding: 0 4px; }
     </style>
 </head>
 <body>
@@ -171,6 +186,18 @@
         </div>
     </div>
     <div class="container">
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <div class="flash-container">
+            {% for msg in messages %}
+            <div class="flash-msg">
+                <span>{{ msg }}</span>
+                <button class="flash-close" onclick="this.parentElement.remove()">&times;</button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
         {% block content %}{% endblock %}
     </div>
     <script>
@@ -189,6 +216,11 @@
             var saved = localStorage.getItem('theme');
             if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
             updateBtn();
+            // auto-dismiss flash messages
+            var flashes = document.querySelectorAll('.flash-msg');
+            flashes.forEach(function(el) {
+                setTimeout(function() { if (el.parentElement) el.remove(); }, 5000);
+            });
         })();
     </script>
 </body>

@@ -34,13 +34,16 @@
     <span style="border-left: 1px solid var(--border); margin: 0 4px;"></span>
     <a href="{{ url_for('project_detail', project_id=project['id'], assigned='me') }}"
        class="btn btn-sm {{ 'btn-primary' if assigned_filter == 'me' else 'btn-secondary' }}">Assigned to Me</a>
+    <span style="border-left: 1px solid var(--border); margin: 0 4px;"></span>
+    <button class="btn btn-sm btn-secondary" onclick="toggleAll(true)">Expand All</button>
+    <button class="btn btn-sm btn-secondary" onclick="toggleAll(false)">Collapse All</button>
 </div>
 
 {% if tests %}
     {% for test in tests %}
-    <div class="card">
+    <div class="card" data-test-id="{{ test['id'] }}">
         <div class="test-header">
-            <div>
+            <div class="test-summary" onclick="toggleTest({{ test['id'] }})">
                 {% if test['passed'] == 1 %}
                     <span class="badge badge-pass">Pass</span>
                 {% elif test['passed'] == 0 %}
@@ -48,8 +51,11 @@
                 {% else %}
                     <span class="badge badge-pending">Pending</span>
                 {% endif %}
+                <span class="desc-preview">{{ test['description'] }}</span>
+                {% if test['assigned_to'] %}<span class="meta-preview">{{ test['assigned_to'] }}</span>{% endif %}
             </div>
-            <div style="display: flex; gap: 6px;">
+            <div style="display: flex; gap: 6px; align-items: center;">
+                <button type="button" class="toggle-btn" onclick="toggleTest({{ test['id'] }})" id="toggle-{{ test['id'] }}">Show</button>
                 <form method="POST" action="{{ url_for('move_test', test_id=test['id'], direction='up') }}" class="inline-form">
                     <button type="submit" class="btn btn-secondary btn-sm" {% if loop.first %}disabled{% endif %}>Move Up</button>
                 </form>
@@ -63,6 +69,7 @@
             </div>
         </div>
 
+        <div class="test-body collapsed" id="test-body-{{ test['id'] }}">
         <form method="POST" action="{{ url_for('update_test', test_id=test['id']) }}">
 
             <div class="meta">
@@ -182,6 +189,7 @@
                 <button type="submit" class="btn btn-secondary btn-sm" style="margin-top: 0;">Comment</button>
             </form>
         </div>
+        </div>{# end test-body #}
     </div>
     {% endfor %}
 {% else %}
@@ -191,4 +199,44 @@
         <p style="color: var(--muted);">No tests yet. Add one above.</p>
     {% endif %}
 {% endif %}
+<script>
+function toggleTest(id) {
+    var body = document.getElementById('test-body-' + id);
+    var btn = document.getElementById('toggle-' + id);
+    if (body.classList.contains('collapsed')) {
+        body.classList.remove('collapsed');
+        btn.textContent = 'Hide';
+        sessionStorage.setItem('test-' + id, 'open');
+    } else {
+        body.classList.add('collapsed');
+        btn.textContent = 'Show';
+        sessionStorage.removeItem('test-' + id);
+    }
+}
+function toggleAll(expand) {
+    document.querySelectorAll('.test-body').forEach(function(el) {
+        var id = el.id.replace('test-body-', '');
+        var btn = document.getElementById('toggle-' + id);
+        if (expand) {
+            el.classList.remove('collapsed');
+            if (btn) btn.textContent = 'Hide';
+            sessionStorage.setItem('test-' + id, 'open');
+        } else {
+            el.classList.add('collapsed');
+            if (btn) btn.textContent = 'Show';
+            sessionStorage.removeItem('test-' + id);
+        }
+    });
+}
+(function() {
+    document.querySelectorAll('.test-body').forEach(function(el) {
+        var id = el.id.replace('test-body-', '');
+        if (sessionStorage.getItem('test-' + id) === 'open') {
+            el.classList.remove('collapsed');
+            var btn = document.getElementById('toggle-' + id);
+            if (btn) btn.textContent = 'Hide';
+        }
+    });
+})();
+</script>
 {% endblock %}
