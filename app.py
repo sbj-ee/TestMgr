@@ -3,10 +3,12 @@ from flask import (
     send_from_directory, session, g, Response,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
+from logging.handlers import RotatingFileHandler
 from functools import wraps
 from datetime import datetime, timezone
 from io import StringIO
 import sqlite3
+import logging
 import shutil
 import csv
 import os
@@ -16,7 +18,18 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-production")
 DB_PATH = os.path.join(os.path.dirname(__file__), "tests.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(LOG_DIR, exist_ok=True)
+
+# Configure logging
+file_handler = RotatingFileHandler(
+    os.path.join(LOG_DIR, "app.log"), maxBytes=1_000_000, backupCount=5
+)
+file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+file_handler.setLevel(logging.INFO)
+app.logger.addHandler(file_handler)
+app.logger.setLevel(logging.INFO)
 
 
 def get_db():
@@ -147,6 +160,14 @@ def load_user():
         conn.close()
 
 
+@app.after_request
+def log_request(response):
+    user = g.user["username"] if g.user else "anonymous"
+    app.logger.info("%s %s %s %s %s", request.remote_addr, user,
+                    request.method, request.path, response.status_code)
+    return response
+
+
 # --- Auth routes ---
 
 @app.route("/login", methods=["GET", "POST"])
@@ -162,7 +183,9 @@ def login():
         conn.close()
         if user and check_password_hash(user["password_hash"], password):
             session["user_id"] = user["id"]
+            app.logger.info("Login successful: %s", username)
             return redirect(url_for("index"))
+        app.logger.warning("Login failed: %s", username)
         error = "Invalid username or password."
     return render_template("login.html", error=error)
 
@@ -200,13 +223,16 @@ def register():
                 ).fetchone()
                 conn.close()
                 session["user_id"] = user["id"]
+                app.logger.info("User registered: %s (admin=%s)", username, is_admin)
                 return redirect(url_for("index"))
     return render_template("register.html", error=error)
 
 
 @app.route("/logout")
 def logout():
+    username = g.user["username"] if g.user else "unknown"
     session.clear()
+    app.logger.info("Logout: %s", username)
     return redirect(url_for("login"))
 
 
@@ -304,6 +330,7 @@ def create_project():
         conn.execute("INSERT INTO projects (name) VALUES (?)", (name,))
         conn.commit()
         conn.close()
+        app.logger.info("Project created: '%s' by %s", name, g.user["username"])
     return redirect(url_for("index"))
 
 
@@ -368,9 +395,11 @@ def delete_project(project_id):
         "(SELECT id FROM tests WHERE project_id = ?)", (project_id,)
     )
     conn.execute("DELETE FROM tests WHERE project_id = ?", (project_id,))
+    project_name = conn.execute("SELECT name FROM projects WHERE id = ?", (project_id,)).fetchone()
     conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
     conn.commit()
     conn.close()
+    app.logger.info("Project deleted: id=%s by %s", project_id, g.user["username"])
     return redirect(url_for("index"))
 
 
@@ -412,6 +441,7 @@ def clone_project(project_id):
             )
     conn.commit()
     conn.close()
+    app.logger.info("Project cloned: '%s' -> id=%s by %s", project["name"], new_project_id, g.user["username"])
     return redirect(url_for("project_detail", project_id=new_project_id))
 
 
@@ -427,6 +457,8 @@ def archive_project(project_id):
     conn.execute("UPDATE projects SET archived = ? WHERE id = ?", (new_val, project_id))
     conn.commit()
     conn.close()
+    action = "archived" if new_val else "unarchived"
+    app.logger.info("Project %s: '%s' by %s", action, project["name"], g.user["username"])
     return redirect(url_for("index"))
 
 
@@ -443,6 +475,7 @@ def export_project(project_id):
     ).fetchall()
 
     fmt = request.args.get("format", "markdown")
+    app.logger.info("Export %s: '%s' by %s", fmt, project["name"], g.user["username"])
 
     if fmt == "csv":
         # CSV export
@@ -591,6 +624,7 @@ def create_test(project_id):
         )
         conn.commit()
         conn.close()
+        app.logger.info("Test created: '%s' in project %s by %s", description, project_id, g.user["username"])
     return redirect(url_for("project_detail", project_id=project_id))
 
 
@@ -623,6 +657,7 @@ def move_test(test_id, direction):
         conn.execute("UPDATE tests SET sort_order = ? WHERE id = ?", (neighbor["sort_order"], test_id))
         conn.execute("UPDATE tests SET sort_order = ? WHERE id = ?", (current_order, neighbor["id"]))
         conn.commit()
+        app.logger.info("Test moved %s: id=%s by %s", direction, test_id, g.user["username"])
     conn.close()
     return redirect(url_for("project_detail", project_id=project_id))
 
@@ -669,6 +704,12 @@ def update_test(test_id):
     conn.commit()
     project_id = test["project_id"]
     conn.close()
+    if passed != test["passed"]:
+        status_labels = {1: "Pass", 0: "Fail", None: "Pending"}
+        app.logger.info("Test status changed: id=%s %s->%s by %s", test_id,
+                        status_labels.get(test["passed"]), status_labels.get(passed), g.user["username"])
+    else:
+        app.logger.info("Test updated: id=%s by %s", test_id, g.user["username"])
     return redirect(url_for("project_detail", project_id=project_id))
 
 
@@ -692,6 +733,7 @@ def delete_test(test_id):
     conn.execute("DELETE FROM tests WHERE id = ?", (test_id,))
     conn.commit()
     conn.close()
+    app.logger.info("Test deleted: id=%s by %s", test_id, g.user["username"])
     return redirect(url_for("project_detail", project_id=project_id))
 
 
@@ -713,6 +755,7 @@ def upload_attachment(test_id):
             (test_id, file.filename, stored_name),
         )
         conn.commit()
+        app.logger.info("Attachment uploaded: '%s' on test %s by %s", file.filename, test_id, g.user["username"])
     conn.close()
     return redirect(url_for("project_detail", project_id=test["project_id"]))
 
@@ -743,6 +786,7 @@ def delete_attachment(attachment_id):
     conn.execute("DELETE FROM attachments WHERE id = ?", (attachment_id,))
     conn.commit()
     conn.close()
+    app.logger.info("Attachment deleted: '%s' (id=%s) by %s", att["original_name"], attachment_id, g.user["username"])
     return redirect(url_for("project_detail", project_id=test["project_id"]))
 
 
@@ -779,6 +823,7 @@ def add_user():
             )
             conn.commit()
             conn.close()
+            app.logger.info("User added: '%s' (admin=%s) by %s", username, is_admin, g.user["username"])
             return redirect(url_for("user_list"))
     # re-render with error
     conn = get_db()
@@ -798,6 +843,7 @@ def toggle_admin(user_id):
         new_val = 0 if user["is_admin"] else 1
         conn.execute("UPDATE users SET is_admin = ? WHERE id = ?", (new_val, user_id))
         conn.commit()
+        app.logger.info("Admin toggled: '%s' admin=%s by %s", user["username"], new_val, g.user["username"])
     conn.close()
     return redirect(url_for("user_list"))
 
@@ -814,6 +860,7 @@ def reset_password(user_id):
         )
         conn.commit()
         conn.close()
+        app.logger.info("Password reset: user_id=%s by %s", user_id, g.user["username"])
     return redirect(url_for("user_list"))
 
 
@@ -823,9 +870,11 @@ def delete_user(user_id):
     if user_id == g.user["id"]:
         return redirect(url_for("user_list"))
     conn = get_db()
+    user = conn.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
     conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
     conn.commit()
     conn.close()
+    app.logger.info("User deleted: '%s' (id=%s) by %s", user["username"] if user else "unknown", user_id, g.user["username"])
     return redirect(url_for("user_list"))
 
 
