@@ -21,6 +21,7 @@ A Flask web application for managing test cases across projects. Track test desc
 - **Flash Messages**: Confirmation banners for all actions with auto-dismiss
 - **Export**: Download project test results as Markdown or CSV
 - **Import**: Bulk-create tests from a CSV file (round-trip compatible with CSV export)
+- **Bulk Actions**: Select multiple tests to mark pass/fail/pending, assign, or delete at once
 - **Logging**: Request and application event logging with rotating log files
 
 ## Requirements
