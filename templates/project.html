@@ -3,7 +3,10 @@
 {% block content %}
 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
     <h2 style="margin-bottom: 0;">{{ project['name'] }}</h2>
-    <a href="{{ url_for('export_project', project_id=project['id']) }}" class="btn btn-secondary">Export Report</a>
+    <div style="display: flex; gap: 6px;">
+        <a href="{{ url_for('export_project', project_id=project['id']) }}" class="btn btn-secondary">Export Markdown</a>
+        <a href="{{ url_for('export_project', project_id=project['id'], format='csv') }}" class="btn btn-secondary">Export CSV</a>
+    </div>
 </div>
 
 <div class="card">
@@ -92,6 +95,9 @@
             {% if test['output'] %}
                 <div class="output-block">{{ test['output'] }}</div>
             {% endif %}
+
+            <label class="field-label">Notes</label>
+            <textarea name="notes" placeholder="Internal notes, observations, or comments">{{ test['notes'] }}</textarea>
 
             <div style="margin-top: 12px;">
                 <button type="submit" class="btn btn-primary">Save Changes</button>

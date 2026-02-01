@@ -5,8 +5,10 @@ from flask import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from datetime import datetime, timezone
+from io import StringIO
 import sqlite3
 import shutil
+import csv
 import os
 import uuid
 
@@ -99,6 +101,8 @@ def init_db():
         conn.execute("ALTER TABLE tests ADD COLUMN executed_by TEXT DEFAULT ''")
     if "executed_at" not in cols:
         conn.execute("ALTER TABLE tests ADD COLUMN executed_at TIMESTAMP DEFAULT NULL")
+    if "notes" not in cols:
+        conn.execute("ALTER TABLE tests ADD COLUMN notes TEXT DEFAULT ''")
     if "sort_order" not in cols:
         conn.execute("ALTER TABLE tests ADD COLUMN sort_order INTEGER DEFAULT 0")
         # initialise sort_order for existing tests based on created_at
@@ -218,12 +222,60 @@ def search():
         results = conn.execute(
             "SELECT t.*, p.name AS project_name FROM tests t "
             "JOIN projects p ON t.project_id = p.id "
-            "WHERE t.description LIKE ? OR t.steps LIKE ? OR t.output LIKE ? "
+            "WHERE t.description LIKE ? OR t.steps LIKE ? OR t.output LIKE ? OR t.notes LIKE ? "
             "ORDER BY p.name, t.sort_order",
-            (f"%{q}%", f"%{q}%", f"%{q}%"),
+            (f"%{q}%", f"%{q}%", f"%{q}%", f"%{q}%"),
         ).fetchall()
         conn.close()
     return render_template("search.html", q=q, results=results)
+
+
+@app.route("/dashboard")
+@login_required
+def dashboard():
+    conn = get_db()
+    # overall stats
+    total_projects = conn.execute(
+        "SELECT COUNT(*) FROM projects WHERE archived = 0"
+    ).fetchone()[0]
+    total_tests = conn.execute(
+        "SELECT COUNT(*) FROM tests t JOIN projects p ON t.project_id = p.id WHERE p.archived = 0"
+    ).fetchone()[0]
+    total_pass = conn.execute(
+        "SELECT COUNT(*) FROM tests t JOIN projects p ON t.project_id = p.id WHERE p.archived = 0 AND t.passed = 1"
+    ).fetchone()[0]
+    total_fail = conn.execute(
+        "SELECT COUNT(*) FROM tests t JOIN projects p ON t.project_id = p.id WHERE p.archived = 0 AND t.passed = 0"
+    ).fetchone()[0]
+    total_pending = total_tests - total_pass - total_fail
+    pass_rate = round(total_pass / total_tests * 100, 1) if total_tests > 0 else 0
+
+    # per-project summary
+    project_stats = conn.execute(
+        "SELECT p.id, p.name, "
+        "COUNT(t.id) AS test_count, "
+        "SUM(CASE WHEN t.passed = 1 THEN 1 ELSE 0 END) AS pass_count, "
+        "SUM(CASE WHEN t.passed = 0 THEN 1 ELSE 0 END) AS fail_count, "
+        "SUM(CASE WHEN t.passed IS NULL THEN 1 ELSE 0 END) AS pending_count "
+        "FROM projects p LEFT JOIN tests t ON t.project_id = p.id "
+        "WHERE p.archived = 0 "
+        "GROUP BY p.id ORDER BY p.name"
+    ).fetchall()
+
+    # recent activity
+    recent = conn.execute(
+        "SELECT h.*, t.description AS test_desc, p.name AS project_name, p.id AS project_id "
+        "FROM test_history h "
+        "JOIN tests t ON h.test_id = t.id "
+        "JOIN projects p ON t.project_id = p.id "
+        "ORDER BY h.changed_at DESC LIMIT 10"
+    ).fetchall()
+
+    conn.close()
+    return render_template("dashboard.html",
+        total_projects=total_projects, total_tests=total_tests,
+        total_pass=total_pass, total_fail=total_fail, total_pending=total_pending,
+        pass_rate=pass_rate, project_stats=project_stats, recent=recent)
 
 
 @app.route("/")
@@ -340,9 +392,9 @@ def clone_project(project_id):
     tests = conn.execute("SELECT * FROM tests WHERE project_id = ? ORDER BY sort_order", (project_id,)).fetchall()
     for test in tests:
         cursor = conn.execute(
-            "INSERT INTO tests (project_id, description, steps, passed, output, created_by, executed_by, sort_order) "
-            "VALUES (?, ?, ?, NULL, '', ?, '', ?)",
-            (new_project_id, test["description"], test["steps"], g.user["username"], test["sort_order"]),
+            "INSERT INTO tests (project_id, description, steps, passed, output, notes, created_by, executed_by, sort_order) "
+            "VALUES (?, ?, ?, NULL, '', ?, ?, '', ?)",
+            (new_project_id, test["description"], test["steps"], test["notes"], g.user["username"], test["sort_order"]),
         )
         new_test_id = cursor.lastrowid
         # clone attachments
@@ -390,6 +442,40 @@ def export_project(project_id):
         "SELECT * FROM tests WHERE project_id = ? ORDER BY sort_order", (project_id,)
     ).fetchall()
 
+    fmt = request.args.get("format", "markdown")
+
+    if fmt == "csv":
+        # CSV export
+        si = StringIO()
+        writer = csv.writer(si)
+        writer.writerow(["#", "Description", "Steps", "Status", "Created By",
+                         "Executed By", "Executed At", "Output", "Notes", "Attachments"])
+        for i, test in enumerate(tests, 1):
+            if test["passed"] == 1:
+                status = "Pass"
+            elif test["passed"] == 0:
+                status = "Fail"
+            else:
+                status = "Pending"
+            atts = conn.execute(
+                "SELECT original_name FROM attachments WHERE test_id = ? ORDER BY created_at",
+                (test["id"],),
+            ).fetchall()
+            att_names = "; ".join(a["original_name"] for a in atts)
+            writer.writerow([
+                i, test["description"], test["steps"], status,
+                test["created_by"], test["executed_by"], test["executed_at"] or "",
+                test["output"], test["notes"], att_names,
+            ])
+        conn.close()
+        filename = project["name"].replace(" ", "_") + "_report.csv"
+        return Response(
+            si.getvalue(),
+            mimetype="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # Markdown export
     total = len(tests)
     passed = sum(1 for t in tests if t["passed"] == 1)
     failed = sum(1 for t in tests if t["passed"] == 0)
@@ -441,6 +527,11 @@ def export_project(project_id):
                 lines.append("```")
                 lines.append(test["output"])
                 lines.append("```")
+                lines.append("")
+            if test["notes"]:
+                lines.append("**Notes:**")
+                lines.append("")
+                lines.append(test["notes"])
                 lines.append("")
 
             # attachments
@@ -548,6 +639,7 @@ def update_test(test_id):
     description = request.form.get("description", "").strip()
     steps = request.form.get("steps", "").strip()
     output = request.form.get("output", "")
+    notes = request.form.get("notes", "")
     passed_val = request.form.get("passed")
 
     if passed_val == "1":
@@ -571,8 +663,8 @@ def update_test(test_id):
         )
 
     conn.execute(
-        "UPDATE tests SET description = ?, steps = ?, passed = ?, output = ?, executed_by = ?, executed_at = ? WHERE id = ?",
-        (description, steps, passed, output, executed_by, executed_at, test_id),
+        "UPDATE tests SET description = ?, steps = ?, passed = ?, output = ?, notes = ?, executed_by = ?, executed_at = ? WHERE id = ?",
+        (description, steps, passed, output, notes, executed_by, executed_at, test_id),
     )
     conn.commit()
     project_id = test["project_id"]

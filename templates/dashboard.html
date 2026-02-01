@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Test Repository{% endblock %}
+{% block content %}
+<h2>Dashboard</h2>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px;">
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 2rem; font-weight: 700;">{{ total_projects }}</div>
+        <div style="font-size: 0.85rem; color: var(--muted);">Projects</div>
+    </div>
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 2rem; font-weight: 700;">{{ total_tests }}</div>
+        <div style="font-size: 0.85rem; color: var(--muted);">Total Tests</div>
+    </div>
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 2rem; font-weight: 700; color: var(--badge-pass-text);">{{ total_pass }}</div>
+        <div style="font-size: 0.85rem; color: var(--muted);">Passed</div>
+    </div>
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 2rem; font-weight: 700; color: var(--badge-fail-text);">{{ total_fail }}</div>
+        <div style="font-size: 0.85rem; color: var(--muted);">Failed</div>
+    </div>
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 2rem; font-weight: 700; color: var(--badge-pending-text);">{{ total_pending }}</div>
+        <div style="font-size: 0.85rem; color: var(--muted);">Pending</div>
+    </div>
+    <div class="card" style="text-align: center;">
+        <div style="font-size: 2rem; font-weight: 700;">{{ pass_rate }}%</div>
+        <div style="font-size: 0.85rem; color: var(--muted);">Pass Rate</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Project Summary</h3>
+    {% if project_stats %}
+    <table class="user-table">
+        <thead>
+            <tr>
+                <th>Project</th>
+                <th>Tests</th>
+                <th>Passed</th>
+                <th>Failed</th>
+                <th>Pending</th>
+                <th>Pass Rate</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in project_stats %}
+            <tr>
+                <td><a href="{{ url_for('project_detail', project_id=p['id']) }}">{{ p['name'] }}</a></td>
+                <td>{{ p['test_count'] }}</td>
+                <td>{{ p['pass_count'] }}</td>
+                <td>{{ p['fail_count'] }}</td>
+                <td>{{ p['pending_count'] }}</td>
+                <td>{{ "%.1f"|format(p['pass_count'] / p['test_count'] * 100) if p['test_count'] > 0 else "0.0" }}%</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: var(--muted);">No active projects.</p>
+    {% endif %}
+</div>
+
+{% if recent %}
+<div class="card">
+    <h3>Recent Activity</h3>
+    <ul style="list-style: none; padding: 0;">
+        {% for entry in recent %}
+        <li style="margin-bottom: 8px; font-size: 0.9rem;">
+            <strong>{{ entry['changed_by'] }}</strong> changed
+            <a href="{{ url_for('project_detail', project_id=entry['project_id']) }}">{{ entry['test_desc'] }}</a>
+            from
+            <span class="badge {{ 'badge-pass' if entry['old_status'] == 'Pass' else ('badge-fail' if entry['old_status'] == 'Fail' else 'badge-pending') }}">{{ entry['old_status'] or 'Pending' }}</span>
+            to
+            <span class="badge {{ 'badge-pass' if entry['new_status'] == 'Pass' else ('badge-fail' if entry['new_status'] == 'Fail' else 'badge-pending') }}">{{ entry['new_status'] or 'Pending' }}</span>
+            <span style="color: var(--muted); font-size: 0.8rem;">&mdash; {{ entry['changed_at'] }}</span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+{% endblock %}

@@ -5,23 +5,92 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Test Repository{% endblock %}</title>
     <style>
+        :root {
+            --bg: #f5f5f5;
+            --text: #333;
+            --card-bg: #fff;
+            --card-shadow: rgba(0,0,0,0.1);
+            --header-bg: #1e293b;
+            --header-text: #fff;
+            --header-link: #94a3b8;
+            --header-user: #cbd5e1;
+            --link: #2563eb;
+            --input-border: #d1d5db;
+            --input-bg: #fff;
+            --input-text: #333;
+            --btn-primary: #2563eb;
+            --btn-primary-hover: #1d4ed8;
+            --btn-danger: #dc2626;
+            --btn-danger-hover: #b91c1c;
+            --btn-secondary: #6b7280;
+            --btn-secondary-hover: #4b5563;
+            --badge-pass-bg: #dcfce7;
+            --badge-pass-text: #166534;
+            --badge-fail-bg: #fee2e2;
+            --badge-fail-text: #991b1b;
+            --badge-pending-bg: #fef3c7;
+            --badge-pending-text: #92400e;
+            --muted: #6b7280;
+            --border: #e5e7eb;
+            --output-bg: #1e293b;
+            --output-text: #e2e8f0;
+            --table-header-bg: #f9fafb;
+            --table-header-text: #374151;
+            --error-bg: #fee2e2;
+            --error-text: #991b1b;
+        }
+        [data-theme="dark"] {
+            --bg: #0f172a;
+            --text: #e2e8f0;
+            --card-bg: #1e293b;
+            --card-shadow: rgba(0,0,0,0.3);
+            --header-bg: #020617;
+            --header-text: #f1f5f9;
+            --header-link: #94a3b8;
+            --header-user: #94a3b8;
+            --link: #60a5fa;
+            --input-border: #475569;
+            --input-bg: #334155;
+            --input-text: #e2e8f0;
+            --btn-primary: #3b82f6;
+            --btn-primary-hover: #2563eb;
+            --btn-danger: #ef4444;
+            --btn-danger-hover: #dc2626;
+            --btn-secondary: #64748b;
+            --btn-secondary-hover: #475569;
+            --badge-pass-bg: #166534;
+            --badge-pass-text: #dcfce7;
+            --badge-fail-bg: #991b1b;
+            --badge-fail-text: #fee2e2;
+            --badge-pending-bg: #92400e;
+            --badge-pending-text: #fef3c7;
+            --muted: #94a3b8;
+            --border: #334155;
+            --output-bg: #0f172a;
+            --output-text: #e2e8f0;
+            --table-header-bg: #334155;
+            --table-header-text: #e2e8f0;
+            --error-bg: #991b1b;
+            --error-text: #fee2e2;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; line-height: 1.6; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
         .container { max-width: 900px; margin: 0 auto; padding: 20px; }
         h1, h2, h3 { margin-bottom: 16px; }
-        a { color: #2563eb; text-decoration: none; }
+        a { color: var(--link); text-decoration: none; }
         a:hover { text-decoration: underline; }
 
-        .header { background: #1e293b; color: #fff; padding: 16px 0; margin-bottom: 24px; }
+        .header { background: var(--header-bg); color: var(--header-text); padding: 16px 0; margin-bottom: 24px; }
         .header .container { display: flex; align-items: center; justify-content: space-between; }
         .header h1 { margin: 0; font-size: 1.25rem; }
-        .header a { color: #94a3b8; }
+        .header a { color: var(--header-link); }
 
-        .card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card { background: var(--card-bg); border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px var(--card-shadow); }
 
         input[type="text"], input[type="password"], textarea {
-            width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px;
+            width: 100%; padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px;
             font-size: 0.95rem; font-family: inherit; margin-bottom: 12px;
+            background: var(--input-bg); color: var(--input-text);
         }
         textarea { resize: vertical; min-height: 80px; }
 
@@ -29,23 +98,23 @@
             display: inline-block; padding: 8px 16px; border: none; border-radius: 6px;
             font-size: 0.9rem; cursor: pointer; font-family: inherit;
         }
-        .btn-primary { background: #2563eb; color: #fff; }
-        .btn-primary:hover { background: #1d4ed8; }
-        .btn-danger { background: #dc2626; color: #fff; }
-        .btn-danger:hover { background: #b91c1c; }
-        .btn-secondary { background: #6b7280; color: #fff; }
-        .btn-secondary:hover { background: #4b5563; }
+        .btn-primary { background: var(--btn-primary); color: #fff; }
+        .btn-primary:hover { background: var(--btn-primary-hover); }
+        .btn-danger { background: var(--btn-danger); color: #fff; }
+        .btn-danger:hover { background: var(--btn-danger-hover); }
+        .btn-secondary { background: var(--btn-secondary); color: #fff; }
+        .btn-secondary:hover { background: var(--btn-secondary-hover); }
         .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
 
         .badge {
             display: inline-block; padding: 2px 8px; border-radius: 12px;
             font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
         }
-        .badge-pass { background: #dcfce7; color: #166534; }
-        .badge-fail { background: #fee2e2; color: #991b1b; }
-        .badge-pending { background: #fef3c7; color: #92400e; }
+        .badge-pass { background: var(--badge-pass-bg); color: var(--badge-pass-text); }
+        .badge-fail { background: var(--badge-fail-bg); color: var(--badge-fail-text); }
+        .badge-pending { background: var(--badge-pending-bg); color: var(--badge-pending-text); }
 
-        .stats { display: flex; gap: 16px; margin-top: 8px; font-size: 0.85rem; color: #6b7280; }
+        .stats { display: flex; gap: 16px; margin-top: 8px; font-size: 0.85rem; color: var(--muted); }
 
         .radio-group { display: flex; gap: 16px; margin-bottom: 12px; }
         .radio-group label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
@@ -57,26 +126,29 @@
         label.field-label { display: block; font-weight: 600; margin-bottom: 4px; font-size: 0.9rem; }
 
         .output-block {
-            background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px;
+            background: var(--output-bg); color: var(--output-text); padding: 12px; border-radius: 6px;
             font-family: "Courier New", monospace; font-size: 0.85rem;
             white-space: pre-wrap; word-break: break-word; margin-top: 8px;
         }
 
         .header-right { display: flex; align-items: center; gap: 16px; }
-        .header-user { color: #cbd5e1; font-size: 0.9rem; }
+        .header-user { color: var(--header-user); font-size: 0.9rem; }
 
         .auth-card { max-width: 400px; margin: 60px auto; }
         .auth-card h2 { text-align: center; }
-        .error-msg { background: #fee2e2; color: #991b1b; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 0.9rem; }
+        .error-msg { background: var(--error-bg); color: var(--error-text); padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 0.9rem; }
         .auth-link { text-align: center; margin-top: 12px; font-size: 0.9rem; }
 
-        .meta { font-size: 0.8rem; color: #6b7280; margin-bottom: 8px; }
+        .meta { font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; }
         .meta span { margin-right: 16px; }
 
-        .user-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .user-table th, .user-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #e5e7eb; }
-        .user-table th { background: #f9fafb; font-size: 0.85rem; font-weight: 600; color: #374151; }
+        .user-table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px var(--card-shadow); }
+        .user-table th, .user-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+        .user-table th { background: var(--table-header-bg); font-size: 0.85rem; font-weight: 600; color: var(--table-header-text); }
         .user-table tr:last-child td { border-bottom: none; }
+
+        .theme-toggle { background: none; border: 1px solid var(--header-link); color: var(--header-link); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; }
+        .theme-toggle:hover { color: var(--header-text); border-color: var(--header-text); }
     </style>
 </head>
 <body>
@@ -86,6 +158,7 @@
             <div class="header-right">
                 <a href="{{ url_for('index') }}">All Projects</a>
                 {% if g.user %}
+                    <a href="{{ url_for('dashboard') }}">Dashboard</a>
                     <a href="{{ url_for('search') }}">Search</a>
                     {% if g.user['is_admin'] %}
                         <a href="{{ url_for('user_list') }}">Manage Users</a>
@@ -93,11 +166,30 @@
                     <span class="header-user">{{ g.user['username'] }}</span>
                     <a href="{{ url_for('logout') }}">Logout</a>
                 {% endif %}
+                <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn">Dark</button>
             </div>
         </div>
     </div>
     <div class="container">
         {% block content %}{% endblock %}
     </div>
+    <script>
+        function toggleTheme() {
+            var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            var theme = isDark ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+            updateBtn();
+        }
+        function updateBtn() {
+            var btn = document.getElementById('theme-btn');
+            if (btn) btn.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? 'Light' : 'Dark';
+        }
+        (function() {
+            var saved = localStorage.getItem('theme');
+            if (saved === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+            updateBtn();
+        })();
+    </script>
 </body>
 </html>
