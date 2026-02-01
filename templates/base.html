@@ -164,6 +164,11 @@
             background: var(--badge-pass-bg); color: var(--badge-pass-text);
         }
         .flash-msg .flash-close { background: none; border: none; cursor: pointer; font-size: 1.1rem; color: inherit; padding: 0 4px; }
+
+        .progress-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--border); margin-top: 8px; }
+        .progress-bar .seg-pass { background: var(--badge-pass-text); }
+        .progress-bar .seg-fail { background: var(--badge-fail-text); }
+        .progress-bar .seg-pending { background: var(--badge-pending-text); opacity: 0.4; }
     </style>
 </head>
 <body>

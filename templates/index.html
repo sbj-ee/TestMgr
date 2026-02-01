@@ -21,7 +21,16 @@
                     <span>{{ project['test_count'] }} tests</span>
                     <span class="badge badge-pass">{{ project['pass_count'] }} passed</span>
                     <span class="badge badge-fail">{{ project['fail_count'] }} failed</span>
+                    {% set pending = project['test_count'] - project['pass_count'] - project['fail_count'] %}
+                    {% if pending > 0 %}<span class="badge badge-pending">{{ pending }} pending</span>{% endif %}
                 </div>
+                {% if project['test_count'] > 0 %}
+                <div class="progress-bar">
+                    <div class="seg-pass" style="width: {{ (project['pass_count'] / project['test_count'] * 100)|round(1) }}%"></div>
+                    <div class="seg-fail" style="width: {{ (project['fail_count'] / project['test_count'] * 100)|round(1) }}%"></div>
+                    <div class="seg-pending" style="width: {{ ((project['test_count'] - project['pass_count'] - project['fail_count']) / project['test_count'] * 100)|round(1) }}%"></div>
+                </div>
+                {% endif %}
             </div>
             <div style="display: flex; gap: 6px;">
                 <form method="POST" action="{{ url_for('clone_project', project_id=project['id']) }}" class="inline-form">
@@ -39,7 +48,7 @@
     </div>
     {% endfor %}
 {% else %}
-    <p style="color: #6b7280;">No projects yet. Create one above.</p>
+    <p style="color: var(--muted);">No projects yet. Create one above.</p>
 {% endif %}
 
 {% if archived_projects %}
@@ -56,7 +65,16 @@
                     <span>{{ project['test_count'] }} tests</span>
                     <span class="badge badge-pass">{{ project['pass_count'] }} passed</span>
                     <span class="badge badge-fail">{{ project['fail_count'] }} failed</span>
+                    {% set pending = project['test_count'] - project['pass_count'] - project['fail_count'] %}
+                    {% if pending > 0 %}<span class="badge badge-pending">{{ pending }} pending</span>{% endif %}
                 </div>
+                {% if project['test_count'] > 0 %}
+                <div class="progress-bar">
+                    <div class="seg-pass" style="width: {{ (project['pass_count'] / project['test_count'] * 100)|round(1) }}%"></div>
+                    <div class="seg-fail" style="width: {{ (project['fail_count'] / project['test_count'] * 100)|round(1) }}%"></div>
+                    <div class="seg-pending" style="width: {{ ((project['test_count'] - project['pass_count'] - project['fail_count']) / project['test_count'] * 100)|round(1) }}%"></div>
+                </div>
+                {% endif %}
             </div>
             <div style="display: flex; gap: 6px;">
                 <form method="POST" action="{{ url_for('clone_project', project_id=project['id']) }}" class="inline-form">
