@@ -17,6 +17,8 @@ A Flask web application for managing test cases across projects. Track test desc
 - **Test History**: Audit log tracking who changed test results and when
 - **Dashboard**: Cross-project stats with total pass rate, per-project summary, and recent activity
 - **Dark Mode**: Toggle between light and dark themes, persisted in browser
+- **Collapsible Test Cards**: Tests collapse by default; expand individually or all at once
+- **Flash Messages**: Confirmation banners for all actions with auto-dismiss
 - **Export**: Download project test results as Markdown or CSV
 - **Logging**: Request and application event logging with rotating log files
 
