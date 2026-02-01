@@ -19,6 +19,17 @@
     </form>
 </div>
 
+<div style="display: flex; gap: 8px; margin-bottom: 16px;">
+    <a href="{{ url_for('project_detail', project_id=project['id']) }}"
+       class="btn btn-sm {{ 'btn-primary' if status_filter == 'all' else 'btn-secondary' }}">All</a>
+    <a href="{{ url_for('project_detail', project_id=project['id'], status='pass') }}"
+       class="btn btn-sm {{ 'btn-primary' if status_filter == 'pass' else 'btn-secondary' }}">Passed</a>
+    <a href="{{ url_for('project_detail', project_id=project['id'], status='fail') }}"
+       class="btn btn-sm {{ 'btn-primary' if status_filter == 'fail' else 'btn-secondary' }}">Failed</a>
+    <a href="{{ url_for('project_detail', project_id=project['id'], status='pending') }}"
+       class="btn btn-sm {{ 'btn-primary' if status_filter == 'pending' else 'btn-secondary' }}">Pending</a>
+</div>
+
 {% if tests %}
     {% for test in tests %}
     <div class="card">
@@ -111,6 +122,10 @@
     </div>
     {% endfor %}
 {% else %}
-    <p style="color: #6b7280;">No tests yet. Add one above.</p>
+    {% if status_filter != 'all' %}
+        <p style="color: #6b7280;">No tests match this filter.</p>
+    {% else %}
+        <p style="color: #6b7280;">No tests yet. Add one above.</p>
+    {% endif %}
 {% endif %}
 {% endblock %}

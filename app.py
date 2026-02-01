@@ -234,16 +234,31 @@ def project_detail(project_id):
     if not project:
         conn.close()
         return "Project not found", 404
-    tests = conn.execute(
-        "SELECT * FROM tests WHERE project_id = ? ORDER BY sort_order", (project_id,)
-    ).fetchall()
+    status_filter = request.args.get("status", "all")
+    if status_filter == "pass":
+        tests = conn.execute(
+            "SELECT * FROM tests WHERE project_id = ? AND passed = 1 ORDER BY sort_order", (project_id,)
+        ).fetchall()
+    elif status_filter == "fail":
+        tests = conn.execute(
+            "SELECT * FROM tests WHERE project_id = ? AND passed = 0 ORDER BY sort_order", (project_id,)
+        ).fetchall()
+    elif status_filter == "pending":
+        tests = conn.execute(
+            "SELECT * FROM tests WHERE project_id = ? AND passed IS NULL ORDER BY sort_order", (project_id,)
+        ).fetchall()
+    else:
+        status_filter = "all"
+        tests = conn.execute(
+            "SELECT * FROM tests WHERE project_id = ? ORDER BY sort_order", (project_id,)
+        ).fetchall()
     attachments_by_test = {}
     for test in tests:
         attachments_by_test[test["id"]] = conn.execute(
             "SELECT * FROM attachments WHERE test_id = ? ORDER BY created_at", (test["id"],)
         ).fetchall()
     conn.close()
-    return render_template("project.html", project=project, tests=tests, attachments=attachments_by_test)
+    return render_template("project.html", project=project, tests=tests, attachments=attachments_by_test, status_filter=status_filter)
 
 
 @app.route("/projects/<int:project_id>/delete", methods=["POST"])
