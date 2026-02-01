@@ -1,9 +1,10 @@
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    send_from_directory, session, g,
+    send_from_directory, session, g, Response,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
+from datetime import datetime, timezone
 import sqlite3
 import shutil
 import os
@@ -63,6 +64,7 @@ def init_db():
             output TEXT DEFAULT '',
             created_by TEXT DEFAULT '',
             executed_by TEXT DEFAULT '',
+            executed_at TIMESTAMP DEFAULT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
         )
@@ -83,6 +85,8 @@ def init_db():
         conn.execute("ALTER TABLE tests ADD COLUMN created_by TEXT DEFAULT ''")
     if "executed_by" not in cols:
         conn.execute("ALTER TABLE tests ADD COLUMN executed_by TEXT DEFAULT ''")
+    if "executed_at" not in cols:
+        conn.execute("ALTER TABLE tests ADD COLUMN executed_at TIMESTAMP DEFAULT NULL")
     conn.commit()
     conn.close()
 
@@ -312,6 +316,96 @@ def archive_project(project_id):
     return redirect(url_for("index"))
 
 
+@app.route("/projects/<int:project_id>/export")
+@login_required
+def export_project(project_id):
+    conn = get_db()
+    project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if not project:
+        conn.close()
+        return "Project not found", 404
+    tests = conn.execute(
+        "SELECT * FROM tests WHERE project_id = ? ORDER BY created_at", (project_id,)
+    ).fetchall()
+
+    total = len(tests)
+    passed = sum(1 for t in tests if t["passed"] == 1)
+    failed = sum(1 for t in tests if t["passed"] == 0)
+    pending = total - passed - failed
+
+    lines = []
+    lines.append(f"# {project['name']} — Test Report")
+    lines.append("")
+    lines.append(f"**Generated:** {project['created_at']}  ")
+    lines.append(f"**Exported by:** {g.user['username']}")
+    lines.append("")
+    lines.append("## Summary")
+    lines.append("")
+    lines.append(f"| Total | Passed | Failed | Pending |")
+    lines.append(f"|-------|--------|--------|---------|")
+    lines.append(f"| {total} | {passed} | {failed} | {pending} |")
+    lines.append("")
+
+    if tests:
+        lines.append("## Test Results")
+        lines.append("")
+        for i, test in enumerate(tests, 1):
+            if test["passed"] == 1:
+                status = "PASS"
+            elif test["passed"] == 0:
+                status = "FAIL"
+            else:
+                status = "PENDING"
+
+            lines.append(f"### {i}. {test['description']}")
+            lines.append("")
+            lines.append(f"**Status:** `{status}`  ")
+            if test["created_by"]:
+                lines.append(f"**Created by:** {test['created_by']}  ")
+            if test["executed_by"]:
+                executed_info = f"**Executed by:** {test['executed_by']}"
+                if test["executed_at"]:
+                    executed_info += f" on {test['executed_at']}"
+                lines.append(executed_info + "  ")
+            lines.append("")
+            lines.append("**Steps:**")
+            lines.append("")
+            for step_line in test["steps"].splitlines():
+                lines.append(f"> {step_line}")
+            lines.append("")
+            if test["output"]:
+                lines.append("**Output:**")
+                lines.append("")
+                lines.append("```")
+                lines.append(test["output"])
+                lines.append("```")
+                lines.append("")
+
+            # attachments
+            atts = conn.execute(
+                "SELECT original_name FROM attachments WHERE test_id = ? ORDER BY created_at",
+                (test["id"],),
+            ).fetchall()
+            if atts:
+                lines.append("**Attachments:**")
+                lines.append("")
+                for att in atts:
+                    lines.append(f"- {att['original_name']}")
+                lines.append("")
+
+            lines.append("---")
+            lines.append("")
+
+    conn.close()
+    md = "\n".join(lines)
+    filename = project["name"].replace(" ", "_") + "_report.md"
+    return Response(
+        md,
+        mimetype="text/markdown",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.route("/projects/<int:project_id>/tests", methods=["POST"])
 @login_required
 def create_test(project_id):
@@ -349,14 +443,16 @@ def update_test(test_id):
     else:
         passed = None
 
-    # track who executed the test when result changes
+    # track who executed the test and when result changes
     executed_by = test["executed_by"]
-    if passed is not None and passed != test["passed"]:
+    executed_at = test["executed_at"]
+    if passed != test["passed"]:
         executed_by = g.user["username"]
+        executed_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
     conn.execute(
-        "UPDATE tests SET description = ?, steps = ?, passed = ?, output = ?, executed_by = ? WHERE id = ?",
-        (description, steps, passed, output, executed_by, test_id),
+        "UPDATE tests SET description = ?, steps = ?, passed = ?, output = ?, executed_by = ?, executed_at = ? WHERE id = ?",
+        (description, steps, passed, output, executed_by, executed_at, test_id),
     )
     conn.commit()
     project_id = test["project_id"]
