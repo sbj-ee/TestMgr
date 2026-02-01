@@ -20,6 +20,7 @@ A Flask web application for managing test cases across projects. Track test desc
 - **Collapsible Test Cards**: Tests collapse by default; expand individually or all at once
 - **Flash Messages**: Confirmation banners for all actions with auto-dismiss
 - **Export**: Download project test results as Markdown or CSV
+- **Import**: Bulk-create tests from a CSV file (round-trip compatible with CSV export)
 - **Logging**: Request and application event logging with rotating log files
 
 ## Requirements
