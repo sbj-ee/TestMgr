@@ -96,6 +96,16 @@ def init_db():
         )
     """)
     conn.execute("""
+        CREATE TABLE IF NOT EXISTS test_comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            test_id INTEGER NOT NULL,
+            username TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (test_id) REFERENCES tests(id) ON DELETE CASCADE
+        )
+    """)
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS test_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             test_id INTEGER NOT NULL,
@@ -116,6 +126,8 @@ def init_db():
         conn.execute("ALTER TABLE tests ADD COLUMN executed_at TIMESTAMP DEFAULT NULL")
     if "notes" not in cols:
         conn.execute("ALTER TABLE tests ADD COLUMN notes TEXT DEFAULT ''")
+    if "assigned_to" not in cols:
+        conn.execute("ALTER TABLE tests ADD COLUMN assigned_to TEXT DEFAULT ''")
     if "sort_order" not in cols:
         conn.execute("ALTER TABLE tests ADD COLUMN sort_order INTEGER DEFAULT 0")
         # initialise sort_order for existing tests based on created_at
@@ -343,6 +355,7 @@ def project_detail(project_id):
         conn.close()
         return "Project not found", 404
     status_filter = request.args.get("status", "all")
+    assigned_filter = request.args.get("assigned", "")
     if status_filter == "pass":
         tests = conn.execute(
             "SELECT * FROM tests WHERE project_id = ? AND passed = 1 ORDER BY sort_order", (project_id,)
@@ -360,8 +373,12 @@ def project_detail(project_id):
         tests = conn.execute(
             "SELECT * FROM tests WHERE project_id = ? ORDER BY sort_order", (project_id,)
         ).fetchall()
+    if assigned_filter == "me":
+        tests = [t for t in tests if t["assigned_to"] == g.user["username"]]
+    users = conn.execute("SELECT username FROM users ORDER BY username").fetchall()
     attachments_by_test = {}
     history_by_test = {}
+    comments_by_test = {}
     for test in tests:
         attachments_by_test[test["id"]] = conn.execute(
             "SELECT * FROM attachments WHERE test_id = ? ORDER BY created_at", (test["id"],)
@@ -369,8 +386,14 @@ def project_detail(project_id):
         history_by_test[test["id"]] = conn.execute(
             "SELECT * FROM test_history WHERE test_id = ? ORDER BY changed_at DESC", (test["id"],)
         ).fetchall()
+        comments_by_test[test["id"]] = conn.execute(
+            "SELECT * FROM test_comments WHERE test_id = ? ORDER BY created_at", (test["id"],)
+        ).fetchall()
     conn.close()
-    return render_template("project.html", project=project, tests=tests, attachments=attachments_by_test, history=history_by_test, status_filter=status_filter)
+    return render_template("project.html", project=project, tests=tests,
+        attachments=attachments_by_test, history=history_by_test,
+        comments=comments_by_test, users=users,
+        status_filter=status_filter, assigned_filter=assigned_filter)
 
 
 @app.route("/projects/<int:project_id>/delete", methods=["POST"])
@@ -386,6 +409,10 @@ def delete_project(project_id):
         path = os.path.join(UPLOAD_DIR, row["stored_name"])
         if os.path.exists(path):
             os.remove(path)
+    conn.execute(
+        "DELETE FROM test_comments WHERE test_id IN "
+        "(SELECT id FROM tests WHERE project_id = ?)", (project_id,)
+    )
     conn.execute(
         "DELETE FROM test_history WHERE test_id IN "
         "(SELECT id FROM tests WHERE project_id = ?)", (project_id,)
@@ -481,8 +508,8 @@ def export_project(project_id):
         # CSV export
         si = StringIO()
         writer = csv.writer(si)
-        writer.writerow(["#", "Description", "Steps", "Status", "Created By",
-                         "Executed By", "Executed At", "Output", "Notes", "Attachments"])
+        writer.writerow(["#", "Description", "Steps", "Status", "Assigned To", "Created By",
+                         "Executed By", "Executed At", "Output", "Notes", "Attachments", "Comments"])
         for i, test in enumerate(tests, 1):
             if test["passed"] == 1:
                 status = "Pass"
@@ -495,10 +522,15 @@ def export_project(project_id):
                 (test["id"],),
             ).fetchall()
             att_names = "; ".join(a["original_name"] for a in atts)
+            cmts = conn.execute(
+                "SELECT username, body, created_at FROM test_comments WHERE test_id = ? ORDER BY created_at",
+                (test["id"],),
+            ).fetchall()
+            cmt_text = "; ".join(f"{c['username']}: {c['body']}" for c in cmts)
             writer.writerow([
-                i, test["description"], test["steps"], status,
+                i, test["description"], test["steps"], status, test["assigned_to"],
                 test["created_by"], test["executed_by"], test["executed_at"] or "",
-                test["output"], test["notes"], att_names,
+                test["output"], test["notes"], att_names, cmt_text,
             ])
         conn.close()
         filename = project["name"].replace(" ", "_") + "_report.csv"
@@ -541,6 +573,8 @@ def export_project(project_id):
             lines.append(f"### {i}. {test['description']}")
             lines.append("")
             lines.append(f"**Status:** `{status}`  ")
+            if test["assigned_to"]:
+                lines.append(f"**Assigned to:** {test['assigned_to']}  ")
             if test["created_by"]:
                 lines.append(f"**Created by:** {test['created_by']}  ")
             if test["executed_by"]:
@@ -593,6 +627,18 @@ def export_project(project_id):
                         f"{entry['old_status'] or 'Pending'} → {entry['new_status'] or 'Pending'} "
                         f"({entry['changed_at']})"
                     )
+                lines.append("")
+
+            # comments
+            cmts = conn.execute(
+                "SELECT * FROM test_comments WHERE test_id = ? ORDER BY created_at",
+                (test["id"],),
+            ).fetchall()
+            if cmts:
+                lines.append("**Comments:**")
+                lines.append("")
+                for cmt in cmts:
+                    lines.append(f"- **{cmt['username']}** ({cmt['created_at']}): {cmt['body']}")
                 lines.append("")
 
             lines.append("---")
@@ -675,6 +721,7 @@ def update_test(test_id):
     steps = request.form.get("steps", "").strip()
     output = request.form.get("output", "")
     notes = request.form.get("notes", "")
+    assigned_to = request.form.get("assigned_to", "")
     passed_val = request.form.get("passed")
 
     if passed_val == "1":
@@ -698,8 +745,8 @@ def update_test(test_id):
         )
 
     conn.execute(
-        "UPDATE tests SET description = ?, steps = ?, passed = ?, output = ?, notes = ?, executed_by = ?, executed_at = ? WHERE id = ?",
-        (description, steps, passed, output, notes, executed_by, executed_at, test_id),
+        "UPDATE tests SET description = ?, steps = ?, passed = ?, output = ?, notes = ?, assigned_to = ?, executed_by = ?, executed_at = ? WHERE id = ?",
+        (description, steps, passed, output, notes, assigned_to, executed_by, executed_at, test_id),
     )
     conn.commit()
     project_id = test["project_id"]
@@ -728,6 +775,7 @@ def delete_test(test_id):
         path = os.path.join(UPLOAD_DIR, row["stored_name"])
         if os.path.exists(path):
             os.remove(path)
+    conn.execute("DELETE FROM test_comments WHERE test_id = ?", (test_id,))
     conn.execute("DELETE FROM test_history WHERE test_id = ?", (test_id,))
     conn.execute("DELETE FROM attachments WHERE test_id = ?", (test_id,))
     conn.execute("DELETE FROM tests WHERE id = ?", (test_id,))
@@ -757,6 +805,46 @@ def upload_attachment(test_id):
         conn.commit()
         app.logger.info("Attachment uploaded: '%s' on test %s by %s", file.filename, test_id, g.user["username"])
     conn.close()
+    return redirect(url_for("project_detail", project_id=test["project_id"]))
+
+
+@app.route("/tests/<int:test_id>/comments", methods=["POST"])
+@login_required
+def add_comment(test_id):
+    conn = get_db()
+    test = conn.execute("SELECT * FROM tests WHERE id = ?", (test_id,)).fetchone()
+    if not test:
+        conn.close()
+        return "Test not found", 404
+    body = request.form.get("body", "").strip()
+    if body:
+        conn.execute(
+            "INSERT INTO test_comments (test_id, username, body) VALUES (?, ?, ?)",
+            (test_id, g.user["username"], body),
+        )
+        conn.commit()
+        app.logger.info("Comment added on test %s by %s", test_id, g.user["username"])
+    conn.close()
+    return redirect(url_for("project_detail", project_id=test["project_id"]))
+
+
+@app.route("/comments/<int:comment_id>/delete", methods=["POST"])
+@login_required
+def delete_comment(comment_id):
+    conn = get_db()
+    comment = conn.execute("SELECT * FROM test_comments WHERE id = ?", (comment_id,)).fetchone()
+    if not comment:
+        conn.close()
+        return "Comment not found", 404
+    # only the comment author or an admin can delete
+    if comment["username"] != g.user["username"] and not g.user["is_admin"]:
+        conn.close()
+        return "Access denied", 403
+    test = conn.execute("SELECT project_id FROM tests WHERE id = ?", (comment["test_id"],)).fetchone()
+    conn.execute("DELETE FROM test_comments WHERE id = ?", (comment_id,))
+    conn.commit()
+    conn.close()
+    app.logger.info("Comment deleted: id=%s by %s", comment_id, g.user["username"])
     return redirect(url_for("project_detail", project_id=test["project_id"]))
 
 

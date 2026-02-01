@@ -31,6 +31,9 @@
        class="btn btn-sm {{ 'btn-primary' if status_filter == 'fail' else 'btn-secondary' }}">Failed</a>
     <a href="{{ url_for('project_detail', project_id=project['id'], status='pending') }}"
        class="btn btn-sm {{ 'btn-primary' if status_filter == 'pending' else 'btn-secondary' }}">Pending</a>
+    <span style="border-left: 1px solid var(--border); margin: 0 4px;"></span>
+    <a href="{{ url_for('project_detail', project_id=project['id'], assigned='me') }}"
+       class="btn btn-sm {{ 'btn-primary' if assigned_filter == 'me' else 'btn-secondary' }}">Assigned to Me</a>
 </div>
 
 {% if tests %}
@@ -65,7 +68,16 @@
             <div class="meta">
                 {% if test['created_by'] %}<span>Created by: <strong>{{ test['created_by'] }}</strong></span>{% endif %}
                 {% if test['executed_by'] %}<span>Executed by: <strong>{{ test['executed_by'] }}</strong>{% if test['executed_at'] %} on {{ test['executed_at'] }}{% endif %}</span>{% endif %}
+                {% if test['assigned_to'] %}<span>Assigned to: <strong>{{ test['assigned_to'] }}</strong></span>{% endif %}
             </div>
+
+            <label class="field-label">Assigned To</label>
+            <select name="assigned_to" style="width: 100%; padding: 8px 12px; border: 1px solid var(--input-border); border-radius: 6px; font-size: 0.95rem; font-family: inherit; margin-bottom: 12px; background: var(--input-bg); color: var(--input-text);">
+                <option value="">Unassigned</option>
+                {% for u in users %}
+                    <option value="{{ u['username'] }}" {{ 'selected' if test['assigned_to'] == u['username'] else '' }}>{{ u['username'] }}</option>
+                {% endfor %}
+            </select>
 
             <label class="field-label">Description</label>
             <input type="text" name="description" value="{{ test['description'] }}" required>
@@ -104,7 +116,7 @@
             </div>
         </form>
 
-        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
             <label class="field-label">Attachments</label>
             {% if attachments.get(test['id']) %}
                 <ul style="list-style: none; padding: 0; margin-bottom: 12px;">
@@ -127,12 +139,12 @@
         </div>
 
         {% if history.get(test['id']) %}
-        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
             <label class="field-label">History</label>
-            <ul style="list-style: none; padding: 0; font-size: 0.85rem; color: #6b7280;">
+            <ul style="list-style: none; padding: 0; font-size: 0.85rem; color: var(--muted);">
                 {% for entry in history[test['id']] %}
                 <li style="margin-bottom: 4px;">
-                    <span style="color: #374151;"><strong>{{ entry['changed_by'] }}</strong></span>
+                    <strong>{{ entry['changed_by'] }}</strong>
                     changed status from
                     <strong>{{ entry['old_status'] or 'Pending' }}</strong>
                     to
@@ -143,13 +155,40 @@
             </ul>
         </div>
         {% endif %}
+
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+            <label class="field-label">Comments</label>
+            {% if comments.get(test['id']) %}
+                <ul style="list-style: none; padding: 0; margin-bottom: 12px;">
+                    {% for cmt in comments[test['id']] %}
+                    <li style="margin-bottom: 8px; font-size: 0.9rem;">
+                        <div>
+                            <strong>{{ cmt['username'] }}</strong>
+                            <span style="color: var(--muted); font-size: 0.8rem;">&mdash; {{ cmt['created_at'] }}</span>
+                            {% if cmt['username'] == g.user['username'] or g.user['is_admin'] %}
+                            <form method="POST" action="{{ url_for('delete_comment', comment_id=cmt['id']) }}" class="inline-form"
+                                  onsubmit="return confirm('Delete this comment?')">
+                                <button type="submit" class="btn btn-danger btn-sm" style="margin-left: 4px;">Delete</button>
+                            </form>
+                            {% endif %}
+                        </div>
+                        <div style="margin-top: 2px;">{{ cmt['body'] }}</div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            <form method="POST" action="{{ url_for('add_comment', test_id=test['id']) }}" style="display: flex; gap: 8px; align-items: flex-start;">
+                <textarea name="body" placeholder="Add a comment..." required style="min-height: 40px; flex: 1;"></textarea>
+                <button type="submit" class="btn btn-secondary btn-sm" style="margin-top: 0;">Comment</button>
+            </form>
+        </div>
     </div>
     {% endfor %}
 {% else %}
-    {% if status_filter != 'all' %}
-        <p style="color: #6b7280;">No tests match this filter.</p>
+    {% if status_filter != 'all' or assigned_filter %}
+        <p style="color: var(--muted);">No tests match this filter.</p>
     {% else %}
-        <p style="color: #6b7280;">No tests yet. Add one above.</p>
+        <p style="color: var(--muted);">No tests yet. Add one above.</p>
     {% endif %}
 {% endif %}
 {% endblock %}
