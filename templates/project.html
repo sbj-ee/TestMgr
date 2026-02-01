@@ -119,6 +119,24 @@
                 <button type="submit" class="btn btn-secondary btn-sm">Upload</button>
             </form>
         </div>
+
+        {% if history.get(test['id']) %}
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+            <label class="field-label">History</label>
+            <ul style="list-style: none; padding: 0; font-size: 0.85rem; color: #6b7280;">
+                {% for entry in history[test['id']] %}
+                <li style="margin-bottom: 4px;">
+                    <span style="color: #374151;"><strong>{{ entry['changed_by'] }}</strong></span>
+                    changed status from
+                    <strong>{{ entry['old_status'] or 'Pending' }}</strong>
+                    to
+                    <strong>{{ entry['new_status'] or 'Pending' }}</strong>
+                    <span style="font-size: 0.8rem;">&mdash; {{ entry['changed_at'] }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
     </div>
     {% endfor %}
 {% else %}

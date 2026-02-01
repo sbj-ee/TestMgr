@@ -80,6 +80,17 @@ def init_db():
             FOREIGN KEY (test_id) REFERENCES tests(id) ON DELETE CASCADE
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS test_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            test_id INTEGER NOT NULL,
+            old_status TEXT,
+            new_status TEXT,
+            changed_by TEXT NOT NULL,
+            changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (test_id) REFERENCES tests(id) ON DELETE CASCADE
+        )
+    """)
     # migrate: add created_by / executed_by if missing
     cols = [row[1] for row in conn.execute("PRAGMA table_info(tests)").fetchall()]
     if "created_by" not in cols:
@@ -271,12 +282,16 @@ def project_detail(project_id):
             "SELECT * FROM tests WHERE project_id = ? ORDER BY sort_order", (project_id,)
         ).fetchall()
     attachments_by_test = {}
+    history_by_test = {}
     for test in tests:
         attachments_by_test[test["id"]] = conn.execute(
             "SELECT * FROM attachments WHERE test_id = ? ORDER BY created_at", (test["id"],)
         ).fetchall()
+        history_by_test[test["id"]] = conn.execute(
+            "SELECT * FROM test_history WHERE test_id = ? ORDER BY changed_at DESC", (test["id"],)
+        ).fetchall()
     conn.close()
-    return render_template("project.html", project=project, tests=tests, attachments=attachments_by_test, status_filter=status_filter)
+    return render_template("project.html", project=project, tests=tests, attachments=attachments_by_test, history=history_by_test, status_filter=status_filter)
 
 
 @app.route("/projects/<int:project_id>/delete", methods=["POST"])
@@ -292,6 +307,10 @@ def delete_project(project_id):
         path = os.path.join(UPLOAD_DIR, row["stored_name"])
         if os.path.exists(path):
             os.remove(path)
+    conn.execute(
+        "DELETE FROM test_history WHERE test_id IN "
+        "(SELECT id FROM tests WHERE project_id = ?)", (project_id,)
+    )
     conn.execute(
         "DELETE FROM attachments WHERE test_id IN "
         "(SELECT id FROM tests WHERE project_id = ?)", (project_id,)
@@ -436,6 +455,22 @@ def export_project(project_id):
                     lines.append(f"- {att['original_name']}")
                 lines.append("")
 
+            # history
+            hist = conn.execute(
+                "SELECT * FROM test_history WHERE test_id = ? ORDER BY changed_at DESC",
+                (test["id"],),
+            ).fetchall()
+            if hist:
+                lines.append("**History:**")
+                lines.append("")
+                for entry in hist:
+                    lines.append(
+                        f"- {entry['changed_by']}: "
+                        f"{entry['old_status'] or 'Pending'} → {entry['new_status'] or 'Pending'} "
+                        f"({entry['changed_at']})"
+                    )
+                lines.append("")
+
             lines.append("---")
             lines.append("")
 
@@ -528,6 +563,12 @@ def update_test(test_id):
     if passed != test["passed"]:
         executed_by = g.user["username"]
         executed_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        # record history
+        status_map = {1: "Pass", 0: "Fail", None: "Pending"}
+        conn.execute(
+            "INSERT INTO test_history (test_id, old_status, new_status, changed_by) VALUES (?, ?, ?, ?)",
+            (test_id, status_map.get(test["passed"]), status_map.get(passed), g.user["username"]),
+        )
 
     conn.execute(
         "UPDATE tests SET description = ?, steps = ?, passed = ?, output = ?, executed_by = ?, executed_at = ? WHERE id = ?",
@@ -554,6 +595,7 @@ def delete_test(test_id):
         path = os.path.join(UPLOAD_DIR, row["stored_name"])
         if os.path.exists(path):
             os.remove(path)
+    conn.execute("DELETE FROM test_history WHERE test_id = ?", (test_id,))
     conn.execute("DELETE FROM attachments WHERE test_id = ?", (test_id,))
     conn.execute("DELETE FROM tests WHERE id = ?", (test_id,))
     conn.commit()
