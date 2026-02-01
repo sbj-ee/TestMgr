@@ -15,10 +15,14 @@ Flask web application for managing test repositories. Tracks test cases across p
 ## Running
 
 ```bash
+# Development (with auto-reload)
 python3 app.py
+
+# Production (with gunicorn)
+gunicorn -b 0.0.0.0:5021 -w 2 app:app
 ```
 
-Runs on `http://0.0.0.0:5021` with debug mode enabled. The SQLite database (`tests.db`) and `uploads/` directory are created automatically on first run.
+Runs on `http://0.0.0.0:5021`. The SQLite database (`tests.db`) and `uploads/` directory are created automatically on first run. Set `SECRET_KEY` env var in production.
 
 ## Architecture
 

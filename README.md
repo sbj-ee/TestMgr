@@ -23,11 +23,22 @@ A Flask web application for managing test cases across projects. Track test desc
 ## Quick Start
 
 ```bash
-pip install flask
+pip install -r requirements.txt
+
+# Development
 python3 app.py
+
+# Production
+gunicorn -b 0.0.0.0:5021 -w 2 app:app
 ```
 
-The app runs at `http://0.0.0.0:5021`. The SQLite database and uploads directory are created automatically.
+Set the `SECRET_KEY` environment variable in production:
+
+```bash
+export SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+```
+
+The SQLite database and uploads directory are created automatically.
 
 The first user to register is automatically granted admin privileges.
 

@@ -11,7 +11,7 @@ import os
 import uuid
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", os.urandom(32))
+app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-production")
 DB_PATH = os.path.join(os.path.dirname(__file__), "tests.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -737,6 +737,7 @@ def delete_user(user_id):
     return redirect(url_for("user_list"))
 
 
+init_db()
+
 if __name__ == "__main__":
-    init_db()
     app.run(host="0.0.0.0", port=5021, debug=True)
