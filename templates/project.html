@@ -6,6 +6,11 @@
     <div style="display: flex; gap: 6px;">
         <a href="{{ url_for('export_project', project_id=project['id']) }}" class="btn btn-secondary">Export Markdown</a>
         <a href="{{ url_for('export_project', project_id=project['id'], format='csv') }}" class="btn btn-secondary">Export CSV</a>
+        <form method="POST" action="{{ url_for('import_tests', project_id=project['id']) }}" enctype="multipart/form-data"
+              style="display: flex; align-items: center; gap: 6px;" class="inline-form">
+            <input type="file" name="file" accept=".csv" required style="font-size: 0.8rem;">
+            <button type="submit" class="btn btn-secondary">Import CSV</button>
+        </form>
     </div>
 </div>
 

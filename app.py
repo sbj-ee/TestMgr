@@ -658,6 +658,70 @@ def export_project(project_id):
     )
 
 
+@app.route("/projects/<int:project_id>/import", methods=["POST"])
+@login_required
+def import_tests(project_id):
+    conn = get_db()
+    project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if not project:
+        conn.close()
+        return "Project not found", 404
+    file = request.files.get("file")
+    if not file or not file.filename:
+        flash("No file selected.")
+        conn.close()
+        return redirect(url_for("project_detail", project_id=project_id))
+    try:
+        content = file.read().decode("utf-8-sig")
+    except UnicodeDecodeError:
+        flash("Could not read file. Please upload a UTF-8 CSV.")
+        conn.close()
+        return redirect(url_for("project_detail", project_id=project_id))
+    reader = csv.DictReader(StringIO(content))
+    if not reader.fieldnames:
+        flash("CSV file is empty or has no headers.")
+        conn.close()
+        return redirect(url_for("project_detail", project_id=project_id))
+    # Normalize headers: strip whitespace, lowercase
+    header_map = {h.strip().lower(): h for h in reader.fieldnames}
+    if "description" not in header_map or "steps" not in header_map:
+        flash("CSV must have 'Description' and 'Steps' columns.")
+        conn.close()
+        return redirect(url_for("project_detail", project_id=project_id))
+    max_order = conn.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) FROM tests WHERE project_id = ?", (project_id,)
+    ).fetchone()[0]
+    imported = 0
+    for row in reader:
+        # Normalize row keys
+        norm = {k.strip().lower(): (v or "").strip() for k, v in row.items()}
+        description = norm.get("description", "")
+        steps = norm.get("steps", "")
+        if not description or not steps:
+            continue
+        status_str = norm.get("status", "").lower()
+        if status_str == "pass":
+            passed = 1
+        elif status_str == "fail":
+            passed = 0
+        else:
+            passed = None
+        output = norm.get("output", "")
+        notes = norm.get("notes", "")
+        max_order += 1
+        conn.execute(
+            "INSERT INTO tests (project_id, description, steps, passed, output, notes, created_by, sort_order) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (project_id, description, steps, passed, output, notes, g.user["username"], max_order),
+        )
+        imported += 1
+    conn.commit()
+    conn.close()
+    app.logger.info("Imported %d test(s) into project %s by %s", imported, project_id, g.user["username"])
+    flash("Imported %d test(s)." % imported)
+    return redirect(url_for("project_detail", project_id=project_id))
+
+
 @app.route("/projects/<int:project_id>/tests", methods=["POST"])
 @login_required
 def create_test(project_id):
