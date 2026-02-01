@@ -23,14 +23,55 @@
                     <span class="badge badge-fail">{{ project['fail_count'] }} failed</span>
                 </div>
             </div>
-            <form method="POST" action="{{ url_for('delete_project', project_id=project['id']) }}" class="inline-form"
-                  onsubmit="return confirm('Delete this project and all its tests?')">
-                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-            </form>
+            <div style="display: flex; gap: 6px;">
+                <form method="POST" action="{{ url_for('clone_project', project_id=project['id']) }}" class="inline-form">
+                    <button type="submit" class="btn btn-secondary btn-sm">Clone</button>
+                </form>
+                <form method="POST" action="{{ url_for('archive_project', project_id=project['id']) }}" class="inline-form">
+                    <button type="submit" class="btn btn-secondary btn-sm">Archive</button>
+                </form>
+                <form method="POST" action="{{ url_for('delete_project', project_id=project['id']) }}" class="inline-form"
+                      onsubmit="return confirm('Delete this project and all its tests?')">
+                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                </form>
+            </div>
         </div>
     </div>
     {% endfor %}
 {% else %}
     <p style="color: #6b7280;">No projects yet. Create one above.</p>
+{% endif %}
+
+{% if archived_projects %}
+<h2 style="margin-top: 32px;">Archived Projects</h2>
+    {% for project in archived_projects %}
+    <div class="card" style="opacity: 0.7;">
+        <div class="test-header">
+            <div>
+                <h3>
+                    <a href="{{ url_for('project_detail', project_id=project['id']) }}">{{ project['name'] }}</a>
+                    <span class="badge badge-pending">Archived</span>
+                </h3>
+                <div class="stats">
+                    <span>{{ project['test_count'] }} tests</span>
+                    <span class="badge badge-pass">{{ project['pass_count'] }} passed</span>
+                    <span class="badge badge-fail">{{ project['fail_count'] }} failed</span>
+                </div>
+            </div>
+            <div style="display: flex; gap: 6px;">
+                <form method="POST" action="{{ url_for('clone_project', project_id=project['id']) }}" class="inline-form">
+                    <button type="submit" class="btn btn-secondary btn-sm">Clone</button>
+                </form>
+                <form method="POST" action="{{ url_for('archive_project', project_id=project['id']) }}" class="inline-form">
+                    <button type="submit" class="btn btn-secondary btn-sm">Unarchive</button>
+                </form>
+                <form method="POST" action="{{ url_for('delete_project', project_id=project['id']) }}" class="inline-form"
+                      onsubmit="return confirm('Delete this project and all its tests?')">
+                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
 {% endif %}
 {% endblock %}

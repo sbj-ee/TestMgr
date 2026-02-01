@@ -5,6 +5,7 @@ from flask import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import sqlite3
+import shutil
 import os
 import uuid
 
@@ -44,9 +45,14 @@ def init_db():
         CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
+            archived INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # migrate: add archived if missing
+    proj_cols = [row[1] for row in conn.execute("PRAGMA table_info(projects)").fetchall()]
+    if "archived" not in proj_cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN archived INTEGER DEFAULT 0")
     conn.execute("""
         CREATE TABLE IF NOT EXISTS tests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -181,15 +187,17 @@ def logout():
 @login_required
 def index():
     conn = get_db()
-    projects = conn.execute(
+    base_query = (
         "SELECT p.*, "
         "(SELECT COUNT(*) FROM tests WHERE project_id = p.id) AS test_count, "
         "(SELECT COUNT(*) FROM tests WHERE project_id = p.id AND passed = 1) AS pass_count, "
         "(SELECT COUNT(*) FROM tests WHERE project_id = p.id AND passed = 0) AS fail_count "
-        "FROM projects p ORDER BY p.created_at DESC"
-    ).fetchall()
+        "FROM projects p WHERE p.archived = ? ORDER BY p.created_at DESC"
+    )
+    projects = conn.execute(base_query, (0,)).fetchall()
+    archived_projects = conn.execute(base_query, (1,)).fetchall()
     conn.close()
-    return render_template("index.html", projects=projects)
+    return render_template("index.html", projects=projects, archived_projects=archived_projects)
 
 
 @app.route("/projects", methods=["POST"])
@@ -243,6 +251,62 @@ def delete_project(project_id):
     )
     conn.execute("DELETE FROM tests WHERE project_id = ?", (project_id,))
     conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+    conn.commit()
+    conn.close()
+    return redirect(url_for("index"))
+
+
+@app.route("/projects/<int:project_id>/clone", methods=["POST"])
+@login_required
+def clone_project(project_id):
+    conn = get_db()
+    project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if not project:
+        conn.close()
+        return "Project not found", 404
+    # create cloned project
+    cursor = conn.execute(
+        "INSERT INTO projects (name, archived) VALUES (?, 0)",
+        (project["name"] + " (Copy)",),
+    )
+    new_project_id = cursor.lastrowid
+    # clone all tests (reset results)
+    tests = conn.execute("SELECT * FROM tests WHERE project_id = ?", (project_id,)).fetchall()
+    for test in tests:
+        cursor = conn.execute(
+            "INSERT INTO tests (project_id, description, steps, passed, output, created_by, executed_by) "
+            "VALUES (?, ?, ?, NULL, '', ?, '')",
+            (new_project_id, test["description"], test["steps"], g.user["username"]),
+        )
+        new_test_id = cursor.lastrowid
+        # clone attachments
+        atts = conn.execute("SELECT * FROM attachments WHERE test_id = ?", (test["id"],)).fetchall()
+        for att in atts:
+            ext = os.path.splitext(att["stored_name"])[1]
+            new_stored = uuid.uuid4().hex + ext
+            src = os.path.join(UPLOAD_DIR, att["stored_name"])
+            dst = os.path.join(UPLOAD_DIR, new_stored)
+            if os.path.exists(src):
+                shutil.copy2(src, dst)
+            conn.execute(
+                "INSERT INTO attachments (test_id, original_name, stored_name) VALUES (?, ?, ?)",
+                (new_test_id, att["original_name"], new_stored),
+            )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("project_detail", project_id=new_project_id))
+
+
+@app.route("/projects/<int:project_id>/archive", methods=["POST"])
+@login_required
+def archive_project(project_id):
+    conn = get_db()
+    project = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if not project:
+        conn.close()
+        return "Project not found", 404
+    new_val = 0 if project["archived"] else 1
+    conn.execute("UPDATE projects SET archived = ? WHERE id = ?", (new_val, project_id))
     conn.commit()
     conn.close()
     return redirect(url_for("index"))
