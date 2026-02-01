@@ -32,10 +32,18 @@
                     <span class="badge badge-pending">Pending</span>
                 {% endif %}
             </div>
-            <form method="POST" action="{{ url_for('delete_test', test_id=test['id']) }}" class="inline-form"
-                  onsubmit="return confirm('Delete this test?')">
-                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-            </form>
+            <div style="display: flex; gap: 6px;">
+                <form method="POST" action="{{ url_for('move_test', test_id=test['id'], direction='up') }}" class="inline-form">
+                    <button type="submit" class="btn btn-secondary btn-sm" {% if loop.first %}disabled{% endif %}>Move Up</button>
+                </form>
+                <form method="POST" action="{{ url_for('move_test', test_id=test['id'], direction='down') }}" class="inline-form">
+                    <button type="submit" class="btn btn-secondary btn-sm" {% if loop.last %}disabled{% endif %}>Move Down</button>
+                </form>
+                <form method="POST" action="{{ url_for('delete_test', test_id=test['id']) }}" class="inline-form"
+                      onsubmit="return confirm('Delete this test?')">
+                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                </form>
+            </div>
         </div>
 
         <form method="POST" action="{{ url_for('update_test', test_id=test['id']) }}">

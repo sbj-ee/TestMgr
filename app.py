@@ -65,6 +65,7 @@ def init_db():
             created_by TEXT DEFAULT '',
             executed_by TEXT DEFAULT '',
             executed_at TIMESTAMP DEFAULT NULL,
+            sort_order INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
         )
@@ -87,6 +88,15 @@ def init_db():
         conn.execute("ALTER TABLE tests ADD COLUMN executed_by TEXT DEFAULT ''")
     if "executed_at" not in cols:
         conn.execute("ALTER TABLE tests ADD COLUMN executed_at TIMESTAMP DEFAULT NULL")
+    if "sort_order" not in cols:
+        conn.execute("ALTER TABLE tests ADD COLUMN sort_order INTEGER DEFAULT 0")
+        # initialise sort_order for existing tests based on created_at
+        conn.execute("""
+            UPDATE tests SET sort_order = (
+                SELECT COUNT(*) FROM tests t2
+                WHERE t2.project_id = tests.project_id AND t2.created_at <= tests.created_at AND t2.id <= tests.id
+            ) - 1
+        """)
     conn.commit()
     conn.close()
 
@@ -225,7 +235,7 @@ def project_detail(project_id):
         conn.close()
         return "Project not found", 404
     tests = conn.execute(
-        "SELECT * FROM tests WHERE project_id = ? ORDER BY created_at DESC", (project_id,)
+        "SELECT * FROM tests WHERE project_id = ? ORDER BY sort_order", (project_id,)
     ).fetchall()
     attachments_by_test = {}
     for test in tests:
@@ -274,13 +284,13 @@ def clone_project(project_id):
         (project["name"] + " (Copy)",),
     )
     new_project_id = cursor.lastrowid
-    # clone all tests (reset results)
-    tests = conn.execute("SELECT * FROM tests WHERE project_id = ?", (project_id,)).fetchall()
+    # clone all tests (reset results, preserve order)
+    tests = conn.execute("SELECT * FROM tests WHERE project_id = ? ORDER BY sort_order", (project_id,)).fetchall()
     for test in tests:
         cursor = conn.execute(
-            "INSERT INTO tests (project_id, description, steps, passed, output, created_by, executed_by) "
-            "VALUES (?, ?, ?, NULL, '', ?, '')",
-            (new_project_id, test["description"], test["steps"], g.user["username"]),
+            "INSERT INTO tests (project_id, description, steps, passed, output, created_by, executed_by, sort_order) "
+            "VALUES (?, ?, ?, NULL, '', ?, '', ?)",
+            (new_project_id, test["description"], test["steps"], g.user["username"], test["sort_order"]),
         )
         new_test_id = cursor.lastrowid
         # clone attachments
@@ -325,7 +335,7 @@ def export_project(project_id):
         conn.close()
         return "Project not found", 404
     tests = conn.execute(
-        "SELECT * FROM tests WHERE project_id = ? ORDER BY created_at", (project_id,)
+        "SELECT * FROM tests WHERE project_id = ? ORDER BY sort_order", (project_id,)
     ).fetchall()
 
     total = len(tests)
@@ -413,12 +423,48 @@ def create_test(project_id):
     steps = request.form.get("steps", "").strip()
     if description and steps:
         conn = get_db()
+        max_order = conn.execute(
+            "SELECT COALESCE(MAX(sort_order), -1) FROM tests WHERE project_id = ?", (project_id,)
+        ).fetchone()[0]
         conn.execute(
-            "INSERT INTO tests (project_id, description, steps, created_by) VALUES (?, ?, ?, ?)",
-            (project_id, description, steps, g.user["username"]),
+            "INSERT INTO tests (project_id, description, steps, created_by, sort_order) VALUES (?, ?, ?, ?, ?)",
+            (project_id, description, steps, g.user["username"], max_order + 1),
         )
         conn.commit()
         conn.close()
+    return redirect(url_for("project_detail", project_id=project_id))
+
+
+@app.route("/tests/<int:test_id>/move/<direction>", methods=["POST"])
+@login_required
+def move_test(test_id, direction):
+    conn = get_db()
+    test = conn.execute("SELECT * FROM tests WHERE id = ?", (test_id,)).fetchone()
+    if not test:
+        conn.close()
+        return "Test not found", 404
+    project_id = test["project_id"]
+    current_order = test["sort_order"]
+
+    if direction == "up":
+        neighbor = conn.execute(
+            "SELECT * FROM tests WHERE project_id = ? AND sort_order < ? ORDER BY sort_order DESC LIMIT 1",
+            (project_id, current_order),
+        ).fetchone()
+    elif direction == "down":
+        neighbor = conn.execute(
+            "SELECT * FROM tests WHERE project_id = ? AND sort_order > ? ORDER BY sort_order ASC LIMIT 1",
+            (project_id, current_order),
+        ).fetchone()
+    else:
+        conn.close()
+        return "Invalid direction", 400
+
+    if neighbor:
+        conn.execute("UPDATE tests SET sort_order = ? WHERE id = ?", (neighbor["sort_order"], test_id))
+        conn.execute("UPDATE tests SET sort_order = ? WHERE id = ?", (current_order, neighbor["id"]))
+        conn.commit()
+    conn.close()
     return redirect(url_for("project_detail", project_id=project_id))
 
 
