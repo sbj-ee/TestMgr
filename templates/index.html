@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Projects - Test Repository{% endblock %}
+{% block content %}
+<h2>Projects</h2>
+
+<div class="card">
+    <form method="POST" action="{{ url_for('create_project') }}">
+        <label class="field-label" for="name">New Project</label>
+        <input type="text" id="name" name="name" placeholder="Project name" required>
+        <button type="submit" class="btn btn-primary">Create Project</button>
+    </form>
+</div>
+
+{% if projects %}
+    {% for project in projects %}
+    <div class="card">
+        <div class="test-header">
+            <div>
+                <h3><a href="{{ url_for('project_detail', project_id=project['id']) }}">{{ project['name'] }}</a></h3>
+                <div class="stats">
+                    <span>{{ project['test_count'] }} tests</span>
+                    <span class="badge badge-pass">{{ project['pass_count'] }} passed</span>
+                    <span class="badge badge-fail">{{ project['fail_count'] }} failed</span>
+                </div>
+            </div>
+            <form method="POST" action="{{ url_for('delete_project', project_id=project['id']) }}" class="inline-form"
+                  onsubmit="return confirm('Delete this project and all its tests?')">
+                <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <p style="color: #6b7280;">No projects yet. Create one above.</p>
+{% endif %}
+{% endblock %}

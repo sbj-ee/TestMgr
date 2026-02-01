@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Login - Test Repository{% endblock %}
+{% block content %}
+<div class="card auth-card">
+    <h2>Login</h2>
+    {% if error %}
+        <div class="error-msg">{{ error }}</div>
+    {% endif %}
+    <form method="POST">
+        <label class="field-label" for="username">Username</label>
+        <input type="text" id="username" name="username" required autofocus>
+
+        <label class="field-label" for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+
+        <button type="submit" class="btn btn-primary" style="width:100%;">Login</button>
+    </form>
+    <div class="auth-link">
+        Don't have an account? <a href="{{ url_for('register') }}">Register</a>
+    </div>
+</div>
+{% endblock %}

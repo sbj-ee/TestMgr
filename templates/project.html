@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}{{ project['name'] }} - Test Repository{% endblock %}
+{% block content %}
+<h2>{{ project['name'] }}</h2>
+
+<div class="card">
+    <h3>Add Test</h3>
+    <form method="POST" action="{{ url_for('create_test', project_id=project['id']) }}">
+        <label class="field-label" for="description">Test Description</label>
+        <input type="text" id="description" name="description" placeholder="What is being tested" required>
+
+        <label class="field-label" for="steps">Test Steps</label>
+        <textarea id="steps" name="steps" placeholder="Step-by-step instructions to execute the test" required></textarea>
+
+        <button type="submit" class="btn btn-primary">Add Test</button>
+    </form>
+</div>
+
+{% if tests %}
+    {% for test in tests %}
+    <div class="card">
+        <form method="POST" action="{{ url_for('update_test', test_id=test['id']) }}">
+            <div class="test-header">
+                <div>
+                    {% if test['passed'] == 1 %}
+                        <span class="badge badge-pass">Pass</span>
+                    {% elif test['passed'] == 0 %}
+                        <span class="badge badge-fail">Fail</span>
+                    {% else %}
+                        <span class="badge badge-pending">Pending</span>
+                    {% endif %}
+                </div>
+                <form method="POST" action="{{ url_for('delete_test', test_id=test['id']) }}" class="inline-form"
+                      onsubmit="return confirm('Delete this test?')">
+                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                </form>
+            </div>
+
+            <div class="meta">
+                {% if test['created_by'] %}<span>Created by: <strong>{{ test['created_by'] }}</strong></span>{% endif %}
+                {% if test['executed_by'] %}<span>Executed by: <strong>{{ test['executed_by'] }}</strong></span>{% endif %}
+            </div>
+
+            <label class="field-label">Description</label>
+            <input type="text" name="description" value="{{ test['description'] }}" required>
+
+            <label class="field-label">Test Steps</label>
+            <textarea name="steps">{{ test['steps'] }}</textarea>
+
+            <label class="field-label">Result</label>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="passed" value="" {{ '' if test['passed'] is not none else 'checked' }}>
+                    Pending
+                </label>
+                <label>
+                    <input type="radio" name="passed" value="1" {{ 'checked' if test['passed'] == 1 else '' }}>
+                    Pass
+                </label>
+                <label>
+                    <input type="radio" name="passed" value="0" {{ 'checked' if test['passed'] == 0 else '' }}>
+                    Fail
+                </label>
+            </div>
+
+            <label class="field-label">Test Output</label>
+            <textarea name="output" placeholder="Paste test output here">{{ test['output'] }}</textarea>
+
+            {% if test['output'] %}
+                <div class="output-block">{{ test['output'] }}</div>
+            {% endif %}
+
+            <div style="margin-top: 12px;">
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </div>
+        </form>
+
+        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+            <label class="field-label">Attachments</label>
+            {% if attachments.get(test['id']) %}
+                <ul style="list-style: none; padding: 0; margin-bottom: 12px;">
+                    {% for att in attachments[test['id']] %}
+                    <li style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                        <a href="{{ url_for('download_attachment', attachment_id=att['id']) }}">{{ att['original_name'] }}</a>
+                        <form method="POST" action="{{ url_for('delete_attachment', attachment_id=att['id']) }}" class="inline-form"
+                              onsubmit="return confirm('Delete this attachment?')">
+                            <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+                        </form>
+                    </li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            <form method="POST" action="{{ url_for('upload_attachment', test_id=test['id']) }}" enctype="multipart/form-data"
+                  style="display: flex; align-items: center; gap: 8px;">
+                <input type="file" name="file" required style="font-size: 0.85rem;">
+                <button type="submit" class="btn btn-secondary btn-sm">Upload</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+{% else %}
+    <p style="color: #6b7280;">No tests yet. Add one above.</p>
+{% endif %}
+{% endblock %}

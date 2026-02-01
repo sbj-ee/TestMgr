@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Register - Test Repository{% endblock %}
+{% block content %}
+<div class="card auth-card">
+    <h2>Register</h2>
+    {% if error %}
+        <div class="error-msg">{{ error }}</div>
+    {% endif %}
+    <form method="POST">
+        <label class="field-label" for="username">Username</label>
+        <input type="text" id="username" name="username" required autofocus>
+
+        <label class="field-label" for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+
+        <label class="field-label" for="confirm_password">Confirm Password</label>
+        <input type="password" id="confirm_password" name="confirm_password" required>
+
+        <button type="submit" class="btn btn-primary" style="width:100%;">Register</button>
+    </form>
+    <div class="auth-link">
+        Already have an account? <a href="{{ url_for('login') }}">Login</a>
+    </div>
+</div>
+{% endblock %}

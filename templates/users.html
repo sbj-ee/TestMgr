@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Manage Users - Test Repository{% endblock %}
+{% block content %}
+<h2>Manage Users</h2>
+
+<div class="card">
+    <h3>Add User</h3>
+    {% if error %}
+        <div class="error-msg">{{ error }}</div>
+    {% endif %}
+    <form method="POST" action="{{ url_for('add_user') }}">
+        <label class="field-label" for="username">Username</label>
+        <input type="text" id="username" name="username" placeholder="Username" required>
+
+        <label class="field-label" for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+
+        <label style="display: flex; align-items: center; gap: 6px; margin-bottom: 12px; cursor: pointer;">
+            <input type="checkbox" name="is_admin" value="1"> Admin
+        </label>
+
+        <button type="submit" class="btn btn-primary">Add User</button>
+    </form>
+</div>
+
+{% if users %}
+<table class="user-table">
+    <thead>
+        <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Created</th>
+            <th>Reset Password</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+        <tr>
+            <td>
+                {{ user['username'] }}
+                {% if user['id'] == g.user['id'] %}<span class="badge badge-pending">you</span>{% endif %}
+            </td>
+            <td>
+                {% if user['is_admin'] %}
+                    <span class="badge badge-pass">Admin</span>
+                {% else %}
+                    <span class="badge badge-pending">User</span>
+                {% endif %}
+            </td>
+            <td style="font-size: 0.85rem; color: #6b7280;">{{ user['created_at'] }}</td>
+            <td>
+                <form method="POST" action="{{ url_for('reset_password', user_id=user['id']) }}" style="display: flex; gap: 6px; align-items: center;">
+                    <input type="password" name="new_password" placeholder="New password" required style="margin-bottom: 0; width: 160px;">
+                    <button type="submit" class="btn btn-secondary btn-sm">Reset</button>
+                </form>
+            </td>
+            <td>
+                <div style="display: flex; gap: 6px;">
+                    {% if user['id'] != g.user['id'] %}
+                        <form method="POST" action="{{ url_for('toggle_admin', user_id=user['id']) }}" class="inline-form">
+                            <button type="submit" class="btn btn-secondary btn-sm">
+                                {% if user['is_admin'] %}Revoke Admin{% else %}Make Admin{% endif %}
+                            </button>
+                        </form>
+                        <form method="POST" action="{{ url_for('delete_user', user_id=user['id']) }}" class="inline-form"
+                              onsubmit="return confirm('Delete user {{ user['username'] }}?')">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                    {% else %}
+                        <span style="font-size: 0.8rem; color: #9ca3af;">&mdash;</span>
+                    {% endif %}
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endif %}
+{% endblock %}
