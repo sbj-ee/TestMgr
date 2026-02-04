@@ -926,6 +926,29 @@ def update_test(test_id):
     return redirect(url_for("project_detail", project_id=project_id))
 
 
+@app.route("/tests/<int:test_id>/duplicate", methods=["POST"])
+@login_required
+def duplicate_test(test_id):
+    conn = get_db()
+    test = conn.execute("SELECT * FROM tests WHERE id = ?", (test_id,)).fetchone()
+    if not test:
+        conn.close()
+        return "Test not found", 404
+    max_order = conn.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) FROM tests WHERE project_id = ?", (test["project_id"],)
+    ).fetchone()[0]
+    conn.execute(
+        "INSERT INTO tests (project_id, description, steps, passed, output, notes, assigned_to, created_by, sort_order) "
+        "VALUES (?, ?, ?, NULL, '', ?, '', ?, ?)",
+        (test["project_id"], test["description"] + " (Copy)", test["steps"], test["notes"], g.user["username"], max_order + 1),
+    )
+    conn.commit()
+    conn.close()
+    app.logger.info("Test duplicated: id=%s by %s", test_id, g.user["username"])
+    flash("Test duplicated.")
+    return redirect(url_for("project_detail", project_id=test["project_id"]))
+
+
 @app.route("/tests/<int:test_id>/delete", methods=["POST"])
 @login_required
 def delete_test(test_id):
