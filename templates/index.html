@@ -32,7 +32,13 @@
                 </div>
                 {% endif %}
             </div>
-            <div style="display: flex; gap: 6px;">
+            <div style="display: flex; gap: 6px; align-items: center;">
+                <form method="POST" action="{{ url_for('rename_project', project_id=project['id']) }}" class="inline-form" style="display:none;" id="rename-form-{{ project['id'] }}">
+                    <input type="text" name="name" value="{{ project['name'] }}" required style="width: 180px; padding: 2px 6px; font-size: 0.9em;">
+                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='none'; document.getElementById('rename-btn-{{ project['id'] }}').style.display='';">Cancel</button>
+                </form>
+                <button class="btn btn-secondary btn-sm" id="rename-btn-{{ project['id'] }}" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='flex'; this.style.display='none';">Rename</button>
                 <form method="POST" action="{{ url_for('clone_project', project_id=project['id']) }}" class="inline-form">
                     <button type="submit" class="btn btn-secondary btn-sm">Clone</button>
                 </form>
@@ -76,7 +82,13 @@
                 </div>
                 {% endif %}
             </div>
-            <div style="display: flex; gap: 6px;">
+            <div style="display: flex; gap: 6px; align-items: center;">
+                <form method="POST" action="{{ url_for('rename_project', project_id=project['id']) }}" class="inline-form" style="display:none;" id="rename-form-{{ project['id'] }}">
+                    <input type="text" name="name" value="{{ project['name'] }}" required style="width: 180px; padding: 2px 6px; font-size: 0.9em;">
+                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='none'; document.getElementById('rename-btn-{{ project['id'] }}').style.display='';">Cancel</button>
+                </form>
+                <button class="btn btn-secondary btn-sm" id="rename-btn-{{ project['id'] }}" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='flex'; this.style.display='none';">Rename</button>
                 <form method="POST" action="{{ url_for('clone_project', project_id=project['id']) }}" class="inline-form">
                     <button type="submit" class="btn btn-secondary btn-sm">Clone</button>
                 </form>

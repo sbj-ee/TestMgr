@@ -397,6 +397,20 @@ def project_detail(project_id):
         status_filter=status_filter, assigned_filter=assigned_filter)
 
 
+@app.route("/projects/<int:project_id>/rename", methods=["POST"])
+@login_required
+def rename_project(project_id):
+    name = request.form.get("name", "").strip()
+    if name:
+        conn = get_db()
+        conn.execute("UPDATE projects SET name = ? WHERE id = ?", (name, project_id))
+        conn.commit()
+        conn.close()
+        app.logger.info("Project %d renamed to '%s' by %s", project_id, name, g.user["username"])
+        flash("Project renamed.")
+    return redirect(url_for("index"))
+
+
 @app.route("/projects/<int:project_id>/delete", methods=["POST"])
 @login_required
 def delete_project(project_id):
