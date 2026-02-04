@@ -3,11 +3,11 @@
 {% block content %}
 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
     <h2 style="margin-bottom: 0;">{{ project['name'] }}</h2>
-    <div style="display: flex; gap: 6px;">
+    <div class="btn-group">
         <a href="{{ url_for('export_project', project_id=project['id']) }}" class="btn btn-secondary">Export Markdown</a>
         <a href="{{ url_for('export_project', project_id=project['id'], format='csv') }}" class="btn btn-secondary">Export CSV</a>
         <form method="POST" action="{{ url_for('import_tests', project_id=project['id']) }}" enctype="multipart/form-data"
-              style="display: flex; align-items: center; gap: 6px;" class="inline-form">
+              class="btn-group">
             <input type="file" name="file" accept=".csv" required style="font-size: 0.8rem;">
             <button type="submit" class="btn btn-secondary">Import CSV</button>
         </form>
@@ -27,7 +27,7 @@
     </form>
 </div>
 
-<div style="display: flex; gap: 8px; margin-bottom: 16px;">
+<div class="btn-group" style="margin-bottom: 16px;">
     <a href="{{ url_for('project_detail', project_id=project['id']) }}"
        class="btn btn-sm {{ 'btn-primary' if status_filter == 'all' else 'btn-secondary' }}">All</a>
     <a href="{{ url_for('project_detail', project_id=project['id'], status='pass') }}"
@@ -85,7 +85,7 @@
                 <span class="desc-preview">{{ test['description'] }}</span>
                 {% if test['assigned_to'] %}<span class="meta-preview">{{ test['assigned_to'] }}</span>{% endif %}
             </div>
-            <div style="display: flex; gap: 6px; align-items: center;">
+            <div class="btn-group">
                 <button type="button" class="toggle-btn" onclick="toggleTest({{ test['id'] }})" id="toggle-{{ test['id'] }}">Show</button>
                 <form method="POST" action="{{ url_for('move_test', test_id=test['id'], direction='up') }}" class="inline-form">
                     <button type="submit" class="btn btn-secondary btn-sm" {% if loop.first %}disabled{% endif %}>Move Up</button>
@@ -170,7 +170,7 @@
                 </ul>
             {% endif %}
             <form method="POST" action="{{ url_for('upload_attachment', test_id=test['id']) }}" enctype="multipart/form-data"
-                  style="display: flex; align-items: center; gap: 8px;">
+                  class="btn-group">
                 <input type="file" name="file" required style="font-size: 0.85rem;">
                 <button type="submit" class="btn btn-secondary btn-sm">Upload</button>
             </form>
@@ -215,7 +215,7 @@
                     {% endfor %}
                 </ul>
             {% endif %}
-            <form method="POST" action="{{ url_for('add_comment', test_id=test['id']) }}" style="display: flex; gap: 8px; align-items: flex-start;">
+            <form method="POST" action="{{ url_for('add_comment', test_id=test['id']) }}" style="display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap;">
                 <textarea name="body" placeholder="Add a comment..." required style="min-height: 40px; flex: 1;"></textarea>
                 <button type="submit" class="btn btn-secondary btn-sm" style="margin-top: 0;">Comment</button>
             </form>

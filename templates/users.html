@@ -50,13 +50,13 @@
             </td>
             <td style="font-size: 0.85rem; color: #6b7280;">{{ user['created_at'] }}</td>
             <td>
-                <form method="POST" action="{{ url_for('reset_password', user_id=user['id']) }}" style="display: flex; gap: 6px; align-items: center;">
+                <form method="POST" action="{{ url_for('reset_password', user_id=user['id']) }}" class="btn-group">
                     <input type="password" name="new_password" placeholder="New password" required style="margin-bottom: 0; width: 160px;">
                     <button type="submit" class="btn btn-secondary btn-sm">Reset</button>
                 </form>
             </td>
             <td>
-                <div style="display: flex; gap: 6px;">
+                <div class="btn-group">
                     {% if user['id'] != g.user['id'] %}
                         <form method="POST" action="{{ url_for('toggle_admin', user_id=user['id']) }}" class="inline-form">
                             <button type="submit" class="btn btn-secondary btn-sm">

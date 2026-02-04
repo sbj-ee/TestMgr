@@ -95,8 +95,11 @@
         textarea { resize: vertical; min-height: 80px; }
 
         .btn {
-            display: inline-block; padding: 8px 16px; border: none; border-radius: 6px;
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 8px 18px; border: none; border-radius: 6px;
             font-size: 0.9rem; cursor: pointer; font-family: inherit;
+            white-space: nowrap; transition: background 0.15s ease;
+            line-height: 1.4;
         }
         .btn-primary { background: var(--btn-primary); color: #fff; }
         .btn-primary:hover { background: var(--btn-primary-hover); }
@@ -104,7 +107,9 @@
         .btn-danger:hover { background: var(--btn-danger-hover); }
         .btn-secondary { background: var(--btn-secondary); color: #fff; }
         .btn-secondary:hover { background: var(--btn-secondary-hover); }
-        .btn-sm { padding: 4px 10px; font-size: 0.8rem; }
+        .btn-sm { padding: 6px 14px; font-size: 0.82rem; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
         .badge {
             display: inline-block; padding: 2px 8px; border-radius: 12px;

@@ -32,9 +32,9 @@
                 </div>
                 {% endif %}
             </div>
-            <div style="display: flex; gap: 6px; align-items: center;">
-                <form method="POST" action="{{ url_for('rename_project', project_id=project['id']) }}" class="inline-form" style="display:none;" id="rename-form-{{ project['id'] }}">
-                    <input type="text" name="name" value="{{ project['name'] }}" required style="width: 180px; padding: 2px 6px; font-size: 0.9em;">
+            <div class="btn-group">
+                <form method="POST" action="{{ url_for('rename_project', project_id=project['id']) }}" class="btn-group" style="display:none;" id="rename-form-{{ project['id'] }}">
+                    <input type="text" name="name" value="{{ project['name'] }}" required style="width: 200px; padding: 6px 10px; font-size: 0.85rem; margin-bottom: 0;">
                     <button type="submit" class="btn btn-primary btn-sm">Save</button>
                     <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='none'; document.getElementById('rename-btn-{{ project['id'] }}').style.display='';">Cancel</button>
                 </form>
@@ -82,9 +82,9 @@
                 </div>
                 {% endif %}
             </div>
-            <div style="display: flex; gap: 6px; align-items: center;">
-                <form method="POST" action="{{ url_for('rename_project', project_id=project['id']) }}" class="inline-form" style="display:none;" id="rename-form-{{ project['id'] }}">
-                    <input type="text" name="name" value="{{ project['name'] }}" required style="width: 180px; padding: 2px 6px; font-size: 0.9em;">
+            <div class="btn-group">
+                <form method="POST" action="{{ url_for('rename_project', project_id=project['id']) }}" class="btn-group" style="display:none;" id="rename-form-{{ project['id'] }}">
+                    <input type="text" name="name" value="{{ project['name'] }}" required style="width: 200px; padding: 6px 10px; font-size: 0.85rem; margin-bottom: 0;">
                     <button type="submit" class="btn btn-primary btn-sm">Save</button>
                     <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='none'; document.getElementById('rename-btn-{{ project['id'] }}').style.display='';">Cancel</button>
                 </form>
