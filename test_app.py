@@ -2,6 +2,7 @@ import pytest
 import os
 import io
 import sys
+import sqlite3
 
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -989,3 +990,329 @@ class TestCascade:
         ).fetchone()
         conn.close()
         assert cloned["passed"] is None
+
+
+# ============================================================
+# 16. Migration (old schema)
+# ============================================================
+
+class TestMigration:
+    def test_migrate_adds_missing_columns(self, tmp_path, monkeypatch):
+        """Create an old-schema DB missing columns and verify init_db migrates them."""
+        db_path = str(tmp_path / "old.db")
+        upload_dir = str(tmp_path / "uploads")
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # Create old-schema tables without the columns that get migrated
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("""
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE tests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                steps TEXT NOT NULL,
+                passed INTEGER DEFAULT NULL,
+                output TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE attachments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                test_id INTEGER NOT NULL,
+                original_name TEXT NOT NULL,
+                stored_name TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE test_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                test_id INTEGER NOT NULL,
+                username TEXT NOT NULL,
+                body TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE test_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                test_id INTEGER NOT NULL,
+                old_status TEXT,
+                new_status TEXT,
+                changed_by TEXT NOT NULL,
+                changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # Insert a user so admin promotion runs
+        from werkzeug.security import generate_password_hash
+        conn.execute(
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+            ("olduser", generate_password_hash("pass")),
+        )
+        # Insert a project and test so sort_order migration runs
+        conn.execute("INSERT INTO projects (name) VALUES ('Old Project')")
+        conn.execute(
+            "INSERT INTO tests (project_id, description, steps) VALUES (1, 'Old Test', 'Steps')"
+        )
+        conn.commit()
+        conn.close()
+
+        monkeypatch.setattr(flask_app, "DB_PATH", db_path)
+        monkeypatch.setattr(flask_app, "UPLOAD_DIR", upload_dir)
+        flask_app.init_db()
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        # Check users got is_admin column and first user promoted
+        user = conn.execute("SELECT * FROM users WHERE username = 'olduser'").fetchone()
+        assert user["is_admin"] == 1
+        # Check projects got archived column
+        proj_cols = [row[1] for row in conn.execute("PRAGMA table_info(projects)").fetchall()]
+        assert "archived" in proj_cols
+        # Check tests got all migrated columns
+        test_cols = [row[1] for row in conn.execute("PRAGMA table_info(tests)").fetchall()]
+        for col in ["created_by", "executed_by", "executed_at", "notes", "assigned_to", "sort_order"]:
+            assert col in test_cols
+        # Check sort_order was initialized
+        test = conn.execute("SELECT sort_order FROM tests LIMIT 1").fetchone()
+        assert test["sort_order"] is not None
+        conn.close()
+
+
+# ============================================================
+# 17. 404 on not-found resources
+# ============================================================
+
+class TestNotFound:
+    def test_clone_project_not_found(self, auth_client):
+        resp = auth_client.post("/projects/9999/clone")
+        assert resp.status_code == 404
+
+    def test_archive_project_not_found(self, auth_client):
+        resp = auth_client.post("/projects/9999/archive")
+        assert resp.status_code == 404
+
+    def test_export_project_not_found(self, auth_client):
+        resp = auth_client.get("/projects/9999/export")
+        assert resp.status_code == 404
+
+    def test_bulk_project_not_found(self, auth_client):
+        resp = auth_client.post("/projects/9999/bulk", data={
+            "test_ids": "1", "action": "pass",
+        })
+        assert resp.status_code == 404
+
+    def test_import_project_not_found(self, auth_client):
+        csv_data = "Description,Steps\nT,S\n"
+        data = {"file": (io.BytesIO(csv_data.encode()), "t.csv")}
+        resp = auth_client.post("/projects/9999/import", data=data,
+                                content_type="multipart/form-data")
+        assert resp.status_code == 404
+
+    def test_move_test_not_found(self, auth_client):
+        resp = auth_client.post("/tests/9999/move/up")
+        assert resp.status_code == 404
+
+    def test_upload_attachment_test_not_found(self, auth_client):
+        data = {"file": (io.BytesIO(b"x"), "f.txt")}
+        resp = auth_client.post("/tests/9999/attachments", data=data,
+                                content_type="multipart/form-data")
+        assert resp.status_code == 404
+
+    def test_add_comment_test_not_found(self, auth_client):
+        resp = auth_client.post("/tests/9999/comments", data={"body": "hi"})
+        assert resp.status_code == 404
+
+    def test_delete_comment_not_found(self, auth_client):
+        resp = auth_client.post("/comments/9999/delete")
+        assert resp.status_code == 404
+
+    def test_delete_attachment_not_found(self, auth_client):
+        resp = auth_client.post("/attachments/9999/delete")
+        assert resp.status_code == 404
+
+
+# ============================================================
+# 18. Bulk action edge cases
+# ============================================================
+
+class TestBulkEdgeCases:
+    def test_bulk_empty_test_ids(self, auth_client):
+        pid = get_project_id(auth_client)
+        resp = auth_client.post(f"/projects/{pid}/bulk", data={
+            "test_ids": "", "action": "pass",
+        })
+        assert resp.status_code == 302
+
+    def test_bulk_no_action(self, auth_client):
+        pid = get_project_id(auth_client)
+        tid = get_test_id(auth_client, pid)
+        resp = auth_client.post(f"/projects/{pid}/bulk", data={
+            "test_ids": str(tid), "action": "",
+        })
+        assert resp.status_code == 302
+
+    def test_bulk_invalid_test_ids(self, auth_client):
+        pid = get_project_id(auth_client)
+        resp = auth_client.post(f"/projects/{pid}/bulk", data={
+            "test_ids": "abc,xyz", "action": "pass",
+        })
+        assert resp.status_code == 302
+
+    def test_bulk_delete_with_attachments(self, auth_client):
+        pid = get_project_id(auth_client)
+        tid = get_test_id(auth_client, pid)
+        data = {"file": (io.BytesIO(b"data"), "att.txt")}
+        auth_client.post(f"/tests/{tid}/attachments", data=data,
+                         content_type="multipart/form-data")
+        conn = flask_app.get_db()
+        att = conn.execute("SELECT stored_name FROM attachments LIMIT 1").fetchone()
+        stored_path = os.path.join(flask_app.UPLOAD_DIR, att["stored_name"])
+        conn.close()
+        assert os.path.exists(stored_path)
+        auth_client.post(f"/projects/{pid}/bulk", data={
+            "test_ids": str(tid), "action": "delete",
+        })
+        assert not os.path.exists(stored_path)
+
+
+# ============================================================
+# 19. Import edge cases
+# ============================================================
+
+class TestImportEdgeCases:
+    def test_import_csv_unicode_error(self, auth_client):
+        pid = get_project_id(auth_client)
+        # Invalid UTF-8 bytes
+        data = {"file": (io.BytesIO(b"\xff\xfe\x00\x01"), "bad.csv")}
+        resp = auth_client.post(f"/projects/{pid}/import", data=data,
+                                content_type="multipart/form-data", follow_redirects=True)
+        assert b"Could not read file" in resp.data
+
+    def test_import_csv_empty_file(self, auth_client):
+        pid = get_project_id(auth_client)
+        data = {"file": (io.BytesIO(b""), "empty.csv")}
+        resp = auth_client.post(f"/projects/{pid}/import", data=data,
+                                content_type="multipart/form-data", follow_redirects=True)
+        assert b"empty or has no headers" in resp.data
+
+
+# ============================================================
+# 20. Export with rich content (covers markdown branches)
+# ============================================================
+
+class TestExportRichContent:
+    def test_export_markdown_with_all_fields(self, auth_client):
+        """Cover markdown export branches for assigned_to, executed_by, output, notes, attachments, history, comments."""
+        pid = get_project_id(auth_client)
+        tid = get_test_id(auth_client, pid)
+        # Set status to pass (creates history, sets executed_by/executed_at)
+        auth_client.post(f"/tests/{tid}/update", data={
+            "description": "Rich Test", "steps": "Step 1\nStep 2",
+            "output": "test output here", "notes": "some notes",
+            "assigned_to": "admin", "passed": "1",
+        })
+        # Add attachment
+        data = {"file": (io.BytesIO(b"attach"), "report.pdf")}
+        auth_client.post(f"/tests/{tid}/attachments", data=data,
+                         content_type="multipart/form-data")
+        # Add comment
+        auth_client.post(f"/tests/{tid}/comments", data={"body": "Looks good"})
+        # Change status again to add more history
+        auth_client.post(f"/tests/{tid}/update", data={
+            "description": "Rich Test", "steps": "Step 1\nStep 2",
+            "output": "test output here", "notes": "some notes",
+            "assigned_to": "admin", "passed": "0",
+        })
+
+        resp = auth_client.get(f"/projects/{pid}/export")
+        content = resp.data.decode()
+        assert "FAIL" in content
+        assert "Assigned to:" in content
+        assert "Executed by:" in content
+        assert "test output here" in content
+        assert "some notes" in content
+        assert "report.pdf" in content
+        assert "History:" in content
+        assert "Comments:" in content
+        assert "Looks good" in content
+
+    def test_export_markdown_pass_status(self, auth_client):
+        """Cover the PASS branch in markdown export."""
+        pid = get_project_id(auth_client)
+        tid = get_test_id(auth_client, pid)
+        auth_client.post(f"/tests/{tid}/update", data={
+            "description": "Passing Test", "steps": "s",
+            "output": "", "notes": "", "assigned_to": "", "passed": "1",
+        })
+        resp = auth_client.get(f"/projects/{pid}/export")
+        assert b"PASS" in resp.data
+
+    def test_export_csv_with_all_fields(self, auth_client):
+        """Cover CSV export branches for pass/fail status labels."""
+        pid = get_project_id(auth_client)
+        tid1 = get_test_id(auth_client, pid)
+        tid2 = get_test_id(auth_client, pid)
+        auth_client.post(f"/tests/{tid1}/update", data={
+            "description": "T1", "steps": "S", "output": "", "notes": "",
+            "assigned_to": "", "passed": "1",
+        })
+        auth_client.post(f"/tests/{tid2}/update", data={
+            "description": "T2", "steps": "S", "output": "", "notes": "",
+            "assigned_to": "", "passed": "0",
+        })
+        resp = auth_client.get(f"/projects/{pid}/export?format=csv")
+        content = resp.data.decode()
+        assert "Pass" in content
+        assert "Fail" in content
+
+
+# ============================================================
+# 21. Assigned filter
+# ============================================================
+
+class TestAssignedFilter:
+    def test_filter_assigned_to_me(self, auth_client):
+        pid = get_project_id(auth_client)
+        tid1 = get_test_id(auth_client, pid)
+        tid2 = get_test_id(auth_client, pid)
+        auth_client.post(f"/tests/{tid1}/update", data={
+            "description": "MyAssignedTask", "steps": "s", "output": "", "notes": "",
+            "assigned_to": "admin", "passed": "",
+        })
+        auth_client.post(f"/tests/{tid2}/update", data={
+            "description": "SomeoneElseTask", "steps": "s", "output": "", "notes": "",
+            "assigned_to": "", "passed": "",
+        })
+        resp = auth_client.get(f"/projects/{pid}?assigned=me")
+        assert b"MyAssignedTask" in resp.data
+        assert b"SomeoneElseTask" not in resp.data
+
+
+# ============================================================
+# 22. Admin add user empty fields
+# ============================================================
+
+class TestAdminEdgeCases:
+    def test_add_user_empty_fields(self, auth_client):
+        resp = auth_client.post("/users/add", data={
+            "username": "", "password": "",
+        }, follow_redirects=True)
+        assert b"Username and password are required" in resp.data
