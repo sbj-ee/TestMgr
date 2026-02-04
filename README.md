@@ -4,7 +4,7 @@ A Flask web application for managing test cases across projects. Track test desc
 
 ## Features
 
-- **Projects**: Create, clone, archive/unarchive, and delete test projects with progress bars
+- **Projects**: Create, rename, clone, archive/unarchive, and delete test projects with progress bars
 - **Test Cases**: Each test includes description, steps, pass/fail/pending status, output, and notes
 - **Test Assignment**: Assign tests to specific users, filter by "Assigned to Me"
 - **Comments**: Discussion thread per test, with delete for authors and admins
