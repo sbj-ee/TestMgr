@@ -393,6 +393,54 @@ class TestTestsCRUD:
 
 
 # ============================================================
+# 4b. Test Duplication
+# ============================================================
+
+class TestDuplicate:
+    def test_duplicate_test(self, auth_client):
+        pid = get_project_id(auth_client)
+        tid = get_test_id(auth_client, pid)
+        # Update original with some data
+        auth_client.post(f"/tests/{tid}/update", data={
+            "description": "Original", "steps": "Step 1\nStep 2",
+            "output": "some output", "notes": "a note",
+            "assigned_to": "admin", "passed": "1",
+        })
+        resp = auth_client.post(f"/tests/{tid}/duplicate", follow_redirects=True)
+        assert b"Test duplicated" in resp.data
+        conn = flask_app.get_db()
+        tests = conn.execute("SELECT * FROM tests WHERE project_id = ? ORDER BY id", (pid,)).fetchall()
+        conn.close()
+        assert len(tests) == 2
+        clone = tests[1]
+        assert clone["description"] == "Original (Copy)"
+        assert clone["steps"] == "Step 1\nStep 2"
+        assert clone["notes"] == "a note"
+        assert clone["passed"] is None  # reset to pending
+        assert clone["output"] == ""  # cleared
+        assert clone["assigned_to"] == ""  # cleared
+        assert clone["created_by"] == "admin"
+
+    def test_duplicate_test_sort_order(self, auth_client):
+        pid = get_project_id(auth_client)
+        tid1 = get_test_id(auth_client, pid)
+        tid2 = get_test_id(auth_client, pid)
+        auth_client.post(f"/tests/{tid1}/duplicate")
+        conn = flask_app.get_db()
+        tests = conn.execute(
+            "SELECT sort_order FROM tests WHERE project_id = ? ORDER BY sort_order", (pid,)
+        ).fetchall()
+        conn.close()
+        assert len(tests) == 3
+        # Duplicated test should be at the end
+        assert tests[2]["sort_order"] > tests[1]["sort_order"]
+
+    def test_duplicate_test_not_found(self, auth_client):
+        resp = auth_client.post("/tests/9999/duplicate")
+        assert resp.status_code == 404
+
+
+# ============================================================
 # 5. Test Reordering
 # ============================================================
 
