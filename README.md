@@ -5,7 +5,7 @@ A Flask web application for managing test cases across projects. Track test desc
 ## Features
 
 - **Projects**: Create, rename, clone, archive/unarchive, and delete test projects with progress bars
-- **Test Cases**: Each test includes description, steps, pass/fail/pending status, output, and notes
+- **Test Cases**: Each test includes description, steps, pass/fail/pending status, output, notes, and duplicate
 - **Test Assignment**: Assign tests to specific users, filter by "Assigned to Me"
 - **Comments**: Discussion thread per test, with delete for authors and admins
 - **File Attachments**: Upload and manage files attached to individual tests
@@ -55,7 +55,7 @@ The first user to register is automatically granted admin privileges.
 
 ```
 app.py                  # Flask application (routes, models, auth)
-test_app.py             # Pytest test suite (106 tests, 99% coverage)
+test_app.py             # Pytest test suite (109 tests, 99% coverage)
 requirements.txt        # Python dependencies
 templates/
   base.html             # Base layout template
@@ -84,7 +84,7 @@ tests.db                # SQLite database (auto-created)
 
 ## Testing
 
-106 tests with 99% code coverage using pytest. Run the test suite with:
+109 tests with 99% code coverage using pytest. Run the test suite with:
 
 ```bash
 pip install pytest
