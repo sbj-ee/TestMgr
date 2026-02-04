@@ -72,9 +72,9 @@
 {% if tests %}
     {% for test in tests %}
     <div class="card" data-test-id="{{ test['id'] }}">
-        <div class="test-header">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
             <input type="checkbox" class="bulk-check test-check" value="{{ test['id'] }}" onchange="updateBulkBar()">
-            <div class="test-summary" onclick="toggleTest({{ test['id'] }})">
+            <div class="test-summary" onclick="toggleTest({{ test['id'] }})" style="flex: 1; min-width: 0;">
                 {% if test['passed'] == 1 %}
                     <span class="badge badge-pass">Pass</span>
                 {% elif test['passed'] == 0 %}
@@ -85,22 +85,22 @@
                 <span class="desc-preview">{{ test['description'] }}</span>
                 {% if test['assigned_to'] %}<span class="meta-preview">{{ test['assigned_to'] }}</span>{% endif %}
             </div>
-            <div class="btn-group">
-                <button type="button" class="toggle-btn" onclick="toggleTest({{ test['id'] }})" id="toggle-{{ test['id'] }}">Show</button>
-                <form method="POST" action="{{ url_for('move_test', test_id=test['id'], direction='up') }}" class="inline-form">
-                    <button type="submit" class="btn btn-secondary btn-sm" {% if loop.first %}disabled{% endif %}>Move Up</button>
-                </form>
-                <form method="POST" action="{{ url_for('move_test', test_id=test['id'], direction='down') }}" class="inline-form">
-                    <button type="submit" class="btn btn-secondary btn-sm" {% if loop.last %}disabled{% endif %}>Move Down</button>
-                </form>
-                <form method="POST" action="{{ url_for('duplicate_test', test_id=test['id']) }}" class="inline-form">
-                    <button type="submit" class="btn btn-secondary btn-sm">Duplicate</button>
-                </form>
-                <form method="POST" action="{{ url_for('delete_test', test_id=test['id']) }}" class="inline-form"
-                      onsubmit="return confirm('Delete this test?')">
-                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-                </form>
-            </div>
+        </div>
+        <div class="btn-group" style="margin-left: 26px;">
+            <button type="button" class="toggle-btn" onclick="toggleTest({{ test['id'] }})" id="toggle-{{ test['id'] }}">Show</button>
+            <form method="POST" action="{{ url_for('move_test', test_id=test['id'], direction='up') }}" class="inline-form">
+                <button type="submit" class="btn btn-secondary btn-xs" {% if loop.first %}disabled{% endif %}>Move Up</button>
+            </form>
+            <form method="POST" action="{{ url_for('move_test', test_id=test['id'], direction='down') }}" class="inline-form">
+                <button type="submit" class="btn btn-secondary btn-xs" {% if loop.last %}disabled{% endif %}>Move Down</button>
+            </form>
+            <form method="POST" action="{{ url_for('duplicate_test', test_id=test['id']) }}" class="inline-form">
+                <button type="submit" class="btn btn-secondary btn-xs">Duplicate</button>
+            </form>
+            <form method="POST" action="{{ url_for('delete_test', test_id=test['id']) }}" class="inline-form"
+                  onsubmit="return confirm('Delete this test?')">
+                <button type="submit" class="btn btn-danger btn-xs">Delete</button>
+            </form>
         </div>
 
         <div class="test-body collapsed" id="test-body-{{ test['id'] }}">
