@@ -80,3 +80,7 @@ tests.db                # SQLite database (auto-created)
 | `attachments` | File attachments linked to tests |
 | `test_comments` | Discussion comments on individual tests |
 | `test_history` | Audit log of test result status changes |
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
