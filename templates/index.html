@@ -32,22 +32,22 @@
                 </div>
                 {% endif %}
             </div>
-            <div class="btn-group">
+            <div class="btn-group" style="flex-shrink: 0;">
                 <form method="POST" action="{{ url_for('rename_project', project_id=project['id']) }}" class="btn-group" style="display:none;" id="rename-form-{{ project['id'] }}">
-                    <input type="text" name="name" value="{{ project['name'] }}" required style="width: 200px; padding: 6px 10px; font-size: 0.85rem; margin-bottom: 0;">
-                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='none'; document.getElementById('rename-btn-{{ project['id'] }}').style.display='';">Cancel</button>
+                    <input type="text" name="name" value="{{ project['name'] }}" required style="width: 180px; padding: 4px 8px; font-size: 0.82rem; margin-bottom: 0;">
+                    <button type="submit" class="btn btn-primary btn-xs">Save</button>
+                    <button type="button" class="btn btn-secondary btn-xs" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='none'; document.getElementById('rename-btn-{{ project['id'] }}').style.display='';">Cancel</button>
                 </form>
-                <button class="btn btn-secondary btn-sm" id="rename-btn-{{ project['id'] }}" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='flex'; this.style.display='none';">Rename</button>
+                <button class="btn btn-secondary btn-xs" id="rename-btn-{{ project['id'] }}" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='flex'; this.style.display='none';">Rename</button>
                 <form method="POST" action="{{ url_for('clone_project', project_id=project['id']) }}" class="inline-form">
-                    <button type="submit" class="btn btn-secondary btn-sm">Clone</button>
+                    <button type="submit" class="btn btn-secondary btn-xs">Clone</button>
                 </form>
                 <form method="POST" action="{{ url_for('archive_project', project_id=project['id']) }}" class="inline-form">
-                    <button type="submit" class="btn btn-secondary btn-sm">Archive</button>
+                    <button type="submit" class="btn btn-secondary btn-xs">Archive</button>
                 </form>
                 <form method="POST" action="{{ url_for('delete_project', project_id=project['id']) }}" class="inline-form"
                       onsubmit="return confirm('Delete this project and all its tests?')">
-                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                    <button type="submit" class="btn btn-danger btn-xs">Delete</button>
                 </form>
             </div>
         </div>
@@ -82,22 +82,22 @@
                 </div>
                 {% endif %}
             </div>
-            <div class="btn-group">
+            <div class="btn-group" style="flex-shrink: 0;">
                 <form method="POST" action="{{ url_for('rename_project', project_id=project['id']) }}" class="btn-group" style="display:none;" id="rename-form-{{ project['id'] }}">
-                    <input type="text" name="name" value="{{ project['name'] }}" required style="width: 200px; padding: 6px 10px; font-size: 0.85rem; margin-bottom: 0;">
-                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
-                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='none'; document.getElementById('rename-btn-{{ project['id'] }}').style.display='';">Cancel</button>
+                    <input type="text" name="name" value="{{ project['name'] }}" required style="width: 180px; padding: 4px 8px; font-size: 0.82rem; margin-bottom: 0;">
+                    <button type="submit" class="btn btn-primary btn-xs">Save</button>
+                    <button type="button" class="btn btn-secondary btn-xs" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='none'; document.getElementById('rename-btn-{{ project['id'] }}').style.display='';">Cancel</button>
                 </form>
-                <button class="btn btn-secondary btn-sm" id="rename-btn-{{ project['id'] }}" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='flex'; this.style.display='none';">Rename</button>
+                <button class="btn btn-secondary btn-xs" id="rename-btn-{{ project['id'] }}" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='flex'; this.style.display='none';">Rename</button>
                 <form method="POST" action="{{ url_for('clone_project', project_id=project['id']) }}" class="inline-form">
-                    <button type="submit" class="btn btn-secondary btn-sm">Clone</button>
+                    <button type="submit" class="btn btn-secondary btn-xs">Clone</button>
                 </form>
                 <form method="POST" action="{{ url_for('archive_project', project_id=project['id']) }}" class="inline-form">
-                    <button type="submit" class="btn btn-secondary btn-sm">Unarchive</button>
+                    <button type="submit" class="btn btn-secondary btn-xs">Unarchive</button>
                 </form>
                 <form method="POST" action="{{ url_for('delete_project', project_id=project['id']) }}" class="inline-form"
                       onsubmit="return confirm('Delete this project and all its tests?')">
-                    <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                    <button type="submit" class="btn btn-danger btn-xs">Delete</button>
                 </form>
             </div>
         </div>

@@ -108,6 +108,7 @@
         .btn-secondary { background: var(--btn-secondary); color: #fff; }
         .btn-secondary:hover { background: var(--btn-secondary-hover); }
         .btn-sm { padding: 6px 14px; font-size: 0.82rem; }
+        .btn-xs { padding: 4px 10px; font-size: 0.78rem; }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
@@ -124,7 +125,8 @@
         .radio-group { display: flex; gap: 16px; margin-bottom: 12px; }
         .radio-group label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
 
-        .test-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+        .test-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
+        .test-header > div:first-child { flex: 1; min-width: 0; }
 
         .inline-form { display: inline; }
 
