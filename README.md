@@ -55,6 +55,7 @@ The first user to register is automatically granted admin privileges.
 
 ```
 app.py                  # Flask application (routes, models, auth)
+test_app.py             # Pytest test suite (106 tests, 99% coverage)
 requirements.txt        # Python dependencies
 templates/
   base.html             # Base layout template
@@ -80,6 +81,17 @@ tests.db                # SQLite database (auto-created)
 | `attachments` | File attachments linked to tests |
 | `test_comments` | Discussion comments on individual tests |
 | `test_history` | Audit log of test result status changes |
+
+## Testing
+
+106 tests with 99% code coverage using pytest. Run the test suite with:
+
+```bash
+pip install pytest
+pytest test_app.py -v
+```
+
+Tests cover authentication, projects CRUD, test cases CRUD, reordering, status filtering, attachments, comments, user management, search, dashboard, export, CSV import, bulk actions, cascading deletes, and schema migration.
 
 ## License
 
