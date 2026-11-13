@@ -22,6 +22,8 @@ def test_app(tmp_path, monkeypatch):
 
     flask_app.app.config["TESTING"] = True
     flask_app.app.config["SECRET_KEY"] = "test-secret"
+    # CSRF is exercised explicitly in TestSecurity; disable it for the rest of the suite
+    flask_app.app.config["CSRF_ENABLED"] = False
 
     flask_app.init_db()
 
@@ -1364,3 +1366,143 @@ class TestAdminEdgeCases:
             "username": "", "password": "",
         }, follow_redirects=True)
         assert b"Username and password are required" in resp.data
+
+
+# ============================================================
+# 21. Security hardening
+# ============================================================
+
+def _csrf_token_from(resp):
+    import re
+    m = re.search(rb'name="csrf_token" value="([0-9a-f]+)"', resp.data)
+    assert m, "page should contain a CSRF token"
+    return m.group(1).decode()
+
+
+class TestSecurity:
+    def test_download_forces_attachment(self, auth_client):
+        pid = get_project_id(auth_client)
+        tid = get_test_id(auth_client, pid)
+        data = {"file": (io.BytesIO(b"<script>alert(1)</script>"), "evil.html")}
+        auth_client.post(f"/tests/{tid}/attachments", data=data,
+                         content_type="multipart/form-data")
+        conn = flask_app.get_db()
+        att = conn.execute("SELECT id FROM attachments LIMIT 1").fetchone()
+        conn.close()
+        resp = auth_client.get(f"/attachments/{att['id']}")
+        assert resp.status_code == 200
+        assert resp.headers["Content-Disposition"].startswith("attachment")
+        assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
+    def test_session_cookie_samesite_lax(self, test_app):
+        assert test_app.config["SESSION_COOKIE_SAMESITE"] == "Lax"
+        assert test_app.config["SESSION_COOKIE_HTTPONLY"] is True
+
+    def test_secret_key_from_env(self, monkeypatch):
+        monkeypatch.setenv("SECRET_KEY", "from-env")
+        assert flask_app.load_secret_key() == "from-env"
+
+    def test_secret_key_generated_and_persisted(self, monkeypatch, tmp_path):
+        monkeypatch.delenv("SECRET_KEY", raising=False)
+        key_file = tmp_path / ".secret_key"
+        monkeypatch.setattr(flask_app, "SECRET_KEY_FILE", str(key_file))
+        key1 = flask_app.load_secret_key()
+        assert len(key1) == 64
+        assert key1 != "change-me-in-production"
+        assert oct(key_file.stat().st_mode & 0o777) == "0o600"
+        assert flask_app.load_secret_key() == key1
+
+    def test_csrf_rejects_post_without_token(self, test_app, client):
+        test_app.config["CSRF_ENABLED"] = True
+        resp = client.post("/register", data={
+            "username": "x", "password": "p", "confirm_password": "p",
+        })
+        assert resp.status_code == 400
+        conn = flask_app.get_db()
+        assert conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+        conn.close()
+
+    def test_csrf_rejects_wrong_token(self, test_app, client):
+        test_app.config["CSRF_ENABLED"] = True
+        client.get("/register")
+        resp = client.post("/register", data={
+            "username": "x", "password": "p", "confirm_password": "p",
+            "csrf_token": "0" * 64,
+        })
+        assert resp.status_code == 400
+
+    def test_csrf_accepts_valid_token(self, test_app, client):
+        test_app.config["CSRF_ENABLED"] = True
+        token = _csrf_token_from(client.get("/register"))
+        resp = client.post("/register", data={
+            "username": "x", "password": "p", "confirm_password": "p",
+            "csrf_token": token,
+        })
+        assert resp.status_code == 302
+        # token keeps working for subsequent forms in the same session
+        token = _csrf_token_from(client.get("/"))
+        resp = client.post("/projects", data={"name": "P", "csrf_token": token})
+        assert resp.status_code == 302
+        conn = flask_app.get_db()
+        assert conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 1
+        conn.close()
+
+    def test_all_post_forms_have_csrf_token(self, auth_client):
+        import re
+        pid = get_project_id(auth_client)
+        get_test_id(auth_client, pid)
+        for url in ["/", f"/projects/{pid}", "/users"]:
+            html = auth_client.get(url).data.decode()
+            forms = re.findall(r'<form\b[^>]*method="POST"[^>]*>(.{0,200})', html, re.I | re.S)
+            assert forms, url
+            for body in forms:
+                assert 'name="csrf_token"' in body, url
+
+    def test_bulk_delete_ignores_tests_from_other_project(self, auth_client):
+        pid_a = get_project_id(auth_client)
+        tid_a = get_test_id(auth_client, pid_a)
+        auth_client.post(f"/tests/{tid_a}/attachments",
+                         data={"file": (io.BytesIO(b"keep"), "keep.txt")},
+                         content_type="multipart/form-data")
+        auth_client.post(f"/tests/{tid_a}/comments", data={"body": "keep me"})
+        auth_client.post(f"/tests/{tid_a}/update", data={
+            "description": "d", "steps": "s", "passed": "1",
+        })
+        conn = flask_app.get_db()
+        stored = conn.execute("SELECT stored_name FROM attachments").fetchone()["stored_name"]
+        conn.close()
+        stored_path = os.path.join(flask_app.UPLOAD_DIR, stored)
+
+        pid_b = get_project_id(auth_client)
+        # try to delete project A's test via project B's bulk endpoint
+        auth_client.post(f"/projects/{pid_b}/bulk", data={
+            "test_ids": str(tid_a), "action": "delete",
+        })
+        conn = flask_app.get_db()
+        assert conn.execute("SELECT COUNT(*) FROM tests WHERE id = ?", (tid_a,)).fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM attachments WHERE test_id = ?", (tid_a,)).fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM test_comments WHERE test_id = ?", (tid_a,)).fetchone()[0] == 1
+        assert conn.execute("SELECT COUNT(*) FROM test_history WHERE test_id = ?", (tid_a,)).fetchone()[0] == 1
+        conn.close()
+        assert os.path.exists(stored_path)
+
+    def test_deleted_user_session_is_logged_out(self, test_app, client):
+        client.post("/register", data={
+            "username": "admin", "password": "pw", "confirm_password": "pw",
+        })
+        client.get("/logout")
+        client.post("/register", data={
+            "username": "victim", "password": "pw", "confirm_password": "pw",
+        })
+        # admin deletes "victim" while victim is still logged in
+        conn = flask_app.get_db()
+        conn.execute("DELETE FROM users WHERE username = 'victim'")
+        conn.commit()
+        conn.close()
+        for method, url in [("get", "/"), ("get", "/dashboard"),
+                            ("post", "/projects"), ("get", "/users")]:
+            resp = getattr(client, method)(url, data={"name": "x"} if method == "post" else None)
+            assert resp.status_code == 302, url
+            assert "/login" in resp.headers["Location"]
+        with client.session_transaction() as sess:
+            assert "user_id" not in sess

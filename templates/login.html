@@ -6,7 +6,7 @@
     {% if error %}
         <div class="error-msg">{{ error }}</div>
     {% endif %}
-    <form method="POST">
+    <form method="POST"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label class="field-label" for="username">Username</label>
         <input type="text" id="username" name="username" required autofocus>
 

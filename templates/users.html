@@ -8,7 +8,7 @@
     {% if error %}
         <div class="error-msg">{{ error }}</div>
     {% endif %}
-    <form method="POST" action="{{ url_for('add_user') }}">
+    <form method="POST" action="{{ url_for('add_user') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label class="field-label" for="username">Username</label>
         <input type="text" id="username" name="username" placeholder="Username" required>
 
@@ -50,7 +50,7 @@
             </td>
             <td style="font-size: 0.85rem; color: #6b7280;">{{ user['created_at'] }}</td>
             <td>
-                <form method="POST" action="{{ url_for('reset_password', user_id=user['id']) }}" class="btn-group">
+                <form method="POST" action="{{ url_for('reset_password', user_id=user['id']) }}" class="btn-group"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="password" name="new_password" placeholder="New password" required style="margin-bottom: 0; width: 160px;">
                     <button type="submit" class="btn btn-secondary btn-sm">Reset</button>
                 </form>
@@ -58,13 +58,13 @@
             <td>
                 <div class="btn-group">
                     {% if user['id'] != g.user['id'] %}
-                        <form method="POST" action="{{ url_for('toggle_admin', user_id=user['id']) }}" class="inline-form">
+                        <form method="POST" action="{{ url_for('toggle_admin', user_id=user['id']) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-secondary btn-sm">
                                 {% if user['is_admin'] %}Revoke Admin{% else %}Make Admin{% endif %}
                             </button>
                         </form>
                         <form method="POST" action="{{ url_for('delete_user', user_id=user['id']) }}" class="inline-form"
-                              onsubmit="return confirm('Delete user {{ user['username'] }}?')">
+                              onsubmit="return confirm('Delete user {{ user['username'] }}?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                         </form>
                     {% else %}

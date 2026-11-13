@@ -34,14 +34,14 @@ A Flask web application for managing test cases across projects. Track test desc
 ```bash
 pip install -r requirements.txt
 
-# Development
+# Development (set FLASK_DEBUG=1 for auto-reload and the debugger -- never on a shared network)
 python3 app.py
 
 # Production
 gunicorn -b 0.0.0.0:5021 -w 2 app:app
 ```
 
-Set the `SECRET_KEY` environment variable in production:
+If `SECRET_KEY` is not set, a random key is generated on first run and saved to `.secret_key` (mode 600, gitignored). To manage the key yourself, set the environment variable:
 
 ```bash
 export SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
@@ -50,6 +50,8 @@ export SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
 The SQLite database and uploads directory are created automatically.
 
 The first user to register is automatically granted admin privileges.
+
+All POST forms are protected by a per-session CSRF token, and attachments are always served as downloads.
 
 ## Project Structure
 

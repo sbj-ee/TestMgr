@@ -9,13 +9,50 @@ from datetime import datetime, timezone
 from io import StringIO
 import sqlite3
 import logging
+import secrets
 import shutil
+import hmac
 import csv
 import os
 import uuid
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SECRET_KEY_FILE = os.path.join(BASE_DIR, ".secret_key")
+
+
+def load_secret_key():
+    """Use SECRET_KEY from the environment, else a random key persisted to .secret_key."""
+    key = os.environ.get("SECRET_KEY")
+    if key:
+        return key
+    if os.path.exists(SECRET_KEY_FILE):
+        with open(SECRET_KEY_FILE) as f:
+            key = f.read().strip()
+        if key:
+            return key
+    # write to a temp file, then hard-link it into place: the link fails if another
+    # process (e.g. a second gunicorn worker) won the race, so everyone uses one key
+    tmp = "%s.%d.tmp" % (SECRET_KEY_FILE, os.getpid())
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(secrets.token_hex(32))
+    try:
+        os.link(tmp, SECRET_KEY_FILE)
+    except FileExistsError:
+        pass
+    finally:
+        os.remove(tmp)
+    with open(SECRET_KEY_FILE) as f:
+        return f.read().strip()
+
+
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "change-me-in-production")
+app.secret_key = load_secret_key()
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    CSRF_ENABLED=True,
+)
 DB_PATH = os.path.join(os.path.dirname(__file__), "tests.db")
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 LOG_DIR = os.path.join(os.path.dirname(__file__), "logs")
@@ -144,7 +181,7 @@ def init_db():
 def login_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if "user_id" not in session:
+        if g.user is None:
             return redirect(url_for("login"))
         return f(*args, **kwargs)
     return decorated
@@ -153,12 +190,39 @@ def login_required(f):
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if "user_id" not in session:
+        if g.user is None:
             return redirect(url_for("login"))
-        if not g.user or not g.user["is_admin"]:
+        if not g.user["is_admin"]:
             return "Access denied", 403
         return f(*args, **kwargs)
     return decorated
+
+
+def csrf_token():
+    """Return the per-session CSRF token, creating it if needed."""
+    token = session.get("csrf_token")
+    if not token:
+        token = secrets.token_hex(32)
+        session["csrf_token"] = token
+    return token
+
+
+app.jinja_env.globals["csrf_token"] = csrf_token
+
+
+@app.before_request
+def csrf_protect():
+    if not app.config.get("CSRF_ENABLED", True):
+        return None
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    expected = session.get("csrf_token")
+    submitted = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token")
+    if not expected or not submitted or not hmac.compare_digest(expected, submitted):
+        app.logger.warning("CSRF check failed: %s %s from %s",
+                           request.method, request.path, request.remote_addr)
+        return "Invalid or missing CSRF token. Reload the page and try again.", 400
+    return None
 
 
 @app.before_request
@@ -170,11 +234,14 @@ def load_user():
             "SELECT * FROM users WHERE id = ?", (session["user_id"],)
         ).fetchone()
         conn.close()
+        if g.user is None:
+            # user was deleted while logged in; drop the stale session
+            session.clear()
 
 
 @app.after_request
 def log_request(response):
-    user = g.user["username"] if g.user else "anonymous"
+    user = g.user["username"] if g.get("user") else "anonymous"
     app.logger.info("%s %s %s %s %s", request.remote_addr, user,
                     request.method, request.path, response.status_code)
     return response
@@ -729,6 +796,15 @@ def bulk_action(project_id):
         flash("Assigned %d test(s) to %s." % (len(test_ids), label))
 
     elif action == "delete":
+        # only touch tests that actually belong to this project
+        test_ids = [r["id"] for r in conn.execute(
+            f"SELECT id FROM tests WHERE id IN ({placeholders}) AND project_id = ?",
+            test_ids + [project_id],
+        ).fetchall()]
+        if not test_ids:
+            conn.close()
+            return redirect(url_for("project_detail", project_id=project_id))
+        placeholders = ",".join("?" * len(test_ids))
         # clean up attachment files
         rows = conn.execute(
             f"SELECT stored_name FROM attachments WHERE test_id IN ({placeholders})",
@@ -1049,7 +1125,13 @@ def download_attachment(attachment_id):
     conn.close()
     if not att:
         return "Attachment not found", 404
-    return send_from_directory(UPLOAD_DIR, att["stored_name"], download_name=att["original_name"])
+    # force download so uploaded HTML/SVG can never render (and run scripts) on our origin
+    response = send_from_directory(
+        UPLOAD_DIR, att["stored_name"],
+        download_name=att["original_name"], as_attachment=True,
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @app.route("/attachments/<int:attachment_id>/delete", methods=["POST"])
@@ -1167,4 +1249,5 @@ def delete_user(user_id):
 init_db()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5021, debug=True)
+    # never enable the Werkzeug debugger by default: it allows remote code execution
+    app.run(host="0.0.0.0", port=5021, debug=os.environ.get("FLASK_DEBUG") == "1")

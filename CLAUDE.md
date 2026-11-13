@@ -15,14 +15,16 @@ Flask web application for managing test repositories. Tracks test cases across p
 ## Running
 
 ```bash
-# Development (with auto-reload)
-python3 app.py
+# Development (FLASK_DEBUG=1 enables auto-reload + debugger)
+FLASK_DEBUG=1 python3 app.py
 
 # Production (with gunicorn)
 gunicorn -b 0.0.0.0:5021 -w 2 app:app
 ```
 
-Runs on `http://0.0.0.0:5021`. The SQLite database (`tests.db`) and `uploads/` directory are created automatically on first run. Set `SECRET_KEY` env var in production.
+Runs on `http://0.0.0.0:5021`. The SQLite database (`tests.db`) and `uploads/` directory are created automatically on first run. `SECRET_KEY` comes from the env var, else a random key persisted to `.secret_key`.
+
+Every POST form must include `<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">` (tests disable CSRF via `CSRF_ENABLED=False`, except `TestSecurity`).
 
 ## Architecture
 

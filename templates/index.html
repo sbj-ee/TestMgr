@@ -4,7 +4,7 @@
 <h2>Projects</h2>
 
 <div class="card">
-    <form method="POST" action="{{ url_for('create_project') }}">
+    <form method="POST" action="{{ url_for('create_project') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <label class="field-label" for="name">New Project</label>
         <input type="text" id="name" name="name" placeholder="Project name" required>
         <button type="submit" class="btn btn-primary">Create Project</button>
@@ -33,20 +33,20 @@
                 {% endif %}
             </div>
             <div class="btn-group" style="flex-shrink: 0;">
-                <form method="POST" action="{{ url_for('rename_project', project_id=project['id']) }}" class="btn-group" style="display:none;" id="rename-form-{{ project['id'] }}">
+                <form method="POST" action="{{ url_for('rename_project', project_id=project['id']) }}" class="btn-group" style="display:none;" id="rename-form-{{ project['id'] }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="text" name="name" value="{{ project['name'] }}" required style="width: 180px; padding: 4px 8px; font-size: 0.82rem; margin-bottom: 0;">
                     <button type="submit" class="btn btn-primary btn-xs">Save</button>
                     <button type="button" class="btn btn-secondary btn-xs" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='none'; document.getElementById('rename-btn-{{ project['id'] }}').style.display='';">Cancel</button>
                 </form>
                 <button class="btn btn-secondary btn-xs" id="rename-btn-{{ project['id'] }}" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='flex'; this.style.display='none';">Rename</button>
-                <form method="POST" action="{{ url_for('clone_project', project_id=project['id']) }}" class="inline-form">
+                <form method="POST" action="{{ url_for('clone_project', project_id=project['id']) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-secondary btn-xs">Clone</button>
                 </form>
-                <form method="POST" action="{{ url_for('archive_project', project_id=project['id']) }}" class="inline-form">
+                <form method="POST" action="{{ url_for('archive_project', project_id=project['id']) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-secondary btn-xs">Archive</button>
                 </form>
                 <form method="POST" action="{{ url_for('delete_project', project_id=project['id']) }}" class="inline-form"
-                      onsubmit="return confirm('Delete this project and all its tests?')">
+                      onsubmit="return confirm('Delete this project and all its tests?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-danger btn-xs">Delete</button>
                 </form>
             </div>
@@ -83,20 +83,20 @@
                 {% endif %}
             </div>
             <div class="btn-group" style="flex-shrink: 0;">
-                <form method="POST" action="{{ url_for('rename_project', project_id=project['id']) }}" class="btn-group" style="display:none;" id="rename-form-{{ project['id'] }}">
+                <form method="POST" action="{{ url_for('rename_project', project_id=project['id']) }}" class="btn-group" style="display:none;" id="rename-form-{{ project['id'] }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="text" name="name" value="{{ project['name'] }}" required style="width: 180px; padding: 4px 8px; font-size: 0.82rem; margin-bottom: 0;">
                     <button type="submit" class="btn btn-primary btn-xs">Save</button>
                     <button type="button" class="btn btn-secondary btn-xs" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='none'; document.getElementById('rename-btn-{{ project['id'] }}').style.display='';">Cancel</button>
                 </form>
                 <button class="btn btn-secondary btn-xs" id="rename-btn-{{ project['id'] }}" onclick="document.getElementById('rename-form-{{ project['id'] }}').style.display='flex'; this.style.display='none';">Rename</button>
-                <form method="POST" action="{{ url_for('clone_project', project_id=project['id']) }}" class="inline-form">
+                <form method="POST" action="{{ url_for('clone_project', project_id=project['id']) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-secondary btn-xs">Clone</button>
                 </form>
-                <form method="POST" action="{{ url_for('archive_project', project_id=project['id']) }}" class="inline-form">
+                <form method="POST" action="{{ url_for('archive_project', project_id=project['id']) }}" class="inline-form"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-secondary btn-xs">Unarchive</button>
                 </form>
                 <form method="POST" action="{{ url_for('delete_project', project_id=project['id']) }}" class="inline-form"
-                      onsubmit="return confirm('Delete this project and all its tests?')">
+                      onsubmit="return confirm('Delete this project and all its tests?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-danger btn-xs">Delete</button>
                 </form>
             </div>
