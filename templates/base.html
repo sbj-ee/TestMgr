@@ -191,15 +191,15 @@
         <div class="container">
             <h1>Test Repository</h1>
             <div class="header-right">
-                <a href="{{ url_for('index') }}">All Projects</a>
+                <a href="{{ url_for('main.index') }}">All Projects</a>
                 {% if g.user %}
-                    <a href="{{ url_for('dashboard') }}">Dashboard</a>
-                    <a href="{{ url_for('search') }}">Search</a>
+                    <a href="{{ url_for('main.dashboard') }}">Dashboard</a>
+                    <a href="{{ url_for('main.search') }}">Search</a>
                     {% if g.user['is_admin'] %}
-                        <a href="{{ url_for('user_list') }}">Manage Users</a>
+                        <a href="{{ url_for('users.user_list') }}">Manage Users</a>
                     {% endif %}
                     <span class="header-user">{{ g.user['username'] }}</span>
-                    <a href="{{ url_for('logout') }}">Logout</a>
+                    <a href="{{ url_for('auth.logout') }}">Logout</a>
                 {% endif %}
                 <button class="theme-toggle" onclick="toggleTheme()" id="theme-btn">Dark</button>
             </div>

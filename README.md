@@ -56,8 +56,16 @@ All POST forms are protected by a per-session CSRF token, and attachments are al
 ## Project Structure
 
 ```
-app.py                  # Flask application (routes, models, auth)
-test_app.py             # Pytest test suite (109 tests, 99% coverage)
+app.py                  # Entry point (python3 app.py / gunicorn app:app)
+testmgr/
+  __init__.py           # App factory: config, secret key, logging, CSRF, blueprints
+  db.py                 # Per-request connections, schema + migrations, shared query helpers
+  auth.py               # Login/register/logout, CSRF, login/admin decorators
+  main.py               # Project index, dashboard, global search
+  projects.py           # Project CRUD, clone/archive, import/export, bulk actions
+  testcases.py          # Test case CRUD, reordering, attachments, comments
+  users.py              # Admin user management
+test_app.py             # Pytest test suite
 requirements.txt        # Python dependencies
 templates/
   base.html             # Base layout template

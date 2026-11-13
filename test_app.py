@@ -7,6 +7,8 @@ import sqlite3
 sys.path.insert(0, os.path.dirname(__file__))
 
 import app as flask_app
+from testmgr import load_secret_key
+from testmgr.db import init_db
 
 
 # --- Fixtures ---
@@ -17,15 +19,15 @@ def test_app(tmp_path, monkeypatch):
     upload_dir = str(tmp_path / "uploads")
     os.makedirs(upload_dir, exist_ok=True)
 
-    monkeypatch.setattr(flask_app, "DB_PATH", db_path)
-    monkeypatch.setattr(flask_app, "UPLOAD_DIR", upload_dir)
+    monkeypatch.setitem(flask_app.app.config, "DATABASE", db_path)
+    monkeypatch.setitem(flask_app.app.config, "UPLOAD_DIR", upload_dir)
 
     flask_app.app.config["TESTING"] = True
     flask_app.app.config["SECRET_KEY"] = "test-secret"
     # CSRF is exercised explicitly in TestSecurity; disable it for the rest of the suite
     flask_app.app.config["CSRF_ENABLED"] = False
 
-    flask_app.init_db()
+    init_db(db_path)
 
     yield flask_app.app
 
@@ -532,7 +534,7 @@ class TestAttachments:
         conn.close()
         assert att is not None
         assert att["original_name"] == "test.txt"
-        assert os.path.exists(os.path.join(flask_app.UPLOAD_DIR, att["stored_name"]))
+        assert os.path.exists(os.path.join(flask_app.app.config["UPLOAD_DIR"], att["stored_name"]))
 
     def test_upload_attachment_no_file(self, auth_client):
         pid = get_project_id(auth_client)
@@ -569,7 +571,7 @@ class TestAttachments:
                          content_type="multipart/form-data")
         conn = flask_app.get_db()
         att = conn.execute("SELECT * FROM attachments LIMIT 1").fetchone()
-        stored_path = os.path.join(flask_app.UPLOAD_DIR, att["stored_name"])
+        stored_path = os.path.join(flask_app.app.config["UPLOAD_DIR"], att["stored_name"])
         conn.close()
         assert os.path.exists(stored_path)
         resp = auth_client.post(f"/attachments/{att['id']}/delete", follow_redirects=True)
@@ -971,7 +973,7 @@ class TestCascade:
                          content_type="multipart/form-data")
         conn = flask_app.get_db()
         att = conn.execute("SELECT stored_name FROM attachments LIMIT 1").fetchone()
-        stored_path = os.path.join(flask_app.UPLOAD_DIR, att["stored_name"])
+        stored_path = os.path.join(flask_app.app.config["UPLOAD_DIR"], att["stored_name"])
         conn.close()
         assert os.path.exists(stored_path)
         auth_client.post(f"/projects/{pid}/delete")
@@ -1007,7 +1009,7 @@ class TestCascade:
                          content_type="multipart/form-data")
         conn = flask_app.get_db()
         att = conn.execute("SELECT stored_name FROM attachments LIMIT 1").fetchone()
-        stored_path = os.path.join(flask_app.UPLOAD_DIR, att["stored_name"])
+        stored_path = os.path.join(flask_app.app.config["UPLOAD_DIR"], att["stored_name"])
         conn.close()
         auth_client.post(f"/tests/{tid}/delete")
         assert not os.path.exists(stored_path)
@@ -1025,7 +1027,7 @@ class TestCascade:
         assert len(atts) == 2
         assert atts[0]["stored_name"] != atts[1]["stored_name"]
         assert atts[1]["original_name"] == "clone.txt"
-        assert os.path.exists(os.path.join(flask_app.UPLOAD_DIR, atts[1]["stored_name"]))
+        assert os.path.exists(os.path.join(flask_app.app.config["UPLOAD_DIR"], atts[1]["stored_name"]))
 
     def test_clone_project_resets_status(self, auth_client):
         pid = get_project_id(auth_client)
@@ -1124,9 +1126,7 @@ class TestMigration:
         conn.commit()
         conn.close()
 
-        monkeypatch.setattr(flask_app, "DB_PATH", db_path)
-        monkeypatch.setattr(flask_app, "UPLOAD_DIR", upload_dir)
-        flask_app.init_db()
+        init_db(db_path)
 
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -1234,7 +1234,7 @@ class TestBulkEdgeCases:
                          content_type="multipart/form-data")
         conn = flask_app.get_db()
         att = conn.execute("SELECT stored_name FROM attachments LIMIT 1").fetchone()
-        stored_path = os.path.join(flask_app.UPLOAD_DIR, att["stored_name"])
+        stored_path = os.path.join(flask_app.app.config["UPLOAD_DIR"], att["stored_name"])
         conn.close()
         assert os.path.exists(stored_path)
         auth_client.post(f"/projects/{pid}/bulk", data={
@@ -1400,17 +1400,16 @@ class TestSecurity:
 
     def test_secret_key_from_env(self, monkeypatch):
         monkeypatch.setenv("SECRET_KEY", "from-env")
-        assert flask_app.load_secret_key() == "from-env"
+        assert load_secret_key() == "from-env"
 
     def test_secret_key_generated_and_persisted(self, monkeypatch, tmp_path):
         monkeypatch.delenv("SECRET_KEY", raising=False)
         key_file = tmp_path / ".secret_key"
-        monkeypatch.setattr(flask_app, "SECRET_KEY_FILE", str(key_file))
-        key1 = flask_app.load_secret_key()
+        key1 = load_secret_key(str(key_file))
         assert len(key1) == 64
         assert key1 != "change-me-in-production"
         assert oct(key_file.stat().st_mode & 0o777) == "0o600"
-        assert flask_app.load_secret_key() == key1
+        assert load_secret_key(str(key_file)) == key1
 
     def test_csrf_rejects_post_without_token(self, test_app, client):
         test_app.config["CSRF_ENABLED"] = True
@@ -1471,7 +1470,7 @@ class TestSecurity:
         conn = flask_app.get_db()
         stored = conn.execute("SELECT stored_name FROM attachments").fetchone()["stored_name"]
         conn.close()
-        stored_path = os.path.join(flask_app.UPLOAD_DIR, stored)
+        stored_path = os.path.join(flask_app.app.config["UPLOAD_DIR"], stored)
 
         pid_b = get_project_id(auth_client)
         # try to delete project A's test via project B's bulk endpoint
@@ -1621,3 +1620,115 @@ class TestCorrectnessFixes:
         ext = "_report.md" if fmt == "markdown" else "_report.csv"
         utf8_part = cd.split("filename*=UTF-8''")[1]
         assert unquote(utf8_part) == 'Ünïcode_"Quoted"_Tést' + ext
+
+
+# ============================================================
+# 23. Structure: app factory, per-request connections, query counts
+# ============================================================
+
+class TestStructure:
+    def _count_queries(self, monkeypatch):
+        """Wrap testmgr.db.connect so every SQL statement is counted."""
+        import testmgr.db as dbmod
+        counter = {"n": 0, "open": 0}
+        real_connect = dbmod.connect
+
+        def counting_connect(path):
+            conn = real_connect(path)
+            counter["open"] += 1
+
+            def trace(sql):
+                if not sql.lstrip().upper().startswith("PRAGMA"):
+                    counter["n"] += 1
+            conn.set_trace_callback(trace)
+            return conn
+        monkeypatch.setattr(dbmod, "connect", counting_connect)
+        return counter
+
+    def _seed(self, client, pid, n):
+        for i in range(n):
+            tid = get_test_id(client, pid)
+            client.post(f"/tests/{tid}/comments", data={"body": f"c{i}"})
+            client.post(f"/tests/{tid}/attachments",
+                        data={"file": (io.BytesIO(b"x"), f"a{i}.txt")},
+                        content_type="multipart/form-data")
+
+    @pytest.mark.parametrize("url", ["/projects/{pid}", "/projects/{pid}/export",
+                                     "/projects/{pid}/export?format=csv"])
+    def test_query_count_independent_of_test_count(self, auth_client, monkeypatch, url):
+        pid = get_project_id(auth_client)
+        self._seed(auth_client, pid, 2)
+        counter = self._count_queries(monkeypatch)
+        auth_client.get(url.format(pid=pid))
+        small = counter["n"]
+        assert small > 0
+        self._seed(auth_client, pid, 8)
+        counter["n"] = 0
+        auth_client.get(url.format(pid=pid))
+        assert counter["n"] == small
+
+    def test_one_connection_per_request(self, auth_client, monkeypatch):
+        pid = get_project_id(auth_client)
+        get_test_id(auth_client, pid)
+        counter = self._count_queries(monkeypatch)
+        auth_client.get(f"/projects/{pid}")
+        assert counter["open"] == 1
+
+    def test_connection_closed_after_request(self, test_app, auth_client):
+        from flask import g
+        with test_app.test_request_context("/"):
+            from testmgr.db import get_db
+            conn = get_db()
+            assert g.db is conn
+        with pytest.raises(sqlite3.ProgrammingError):
+            conn.execute("SELECT 1")
+
+    def test_uncommitted_work_rolled_back_on_error(self, test_app):
+        from testmgr.db import get_db
+        with pytest.raises(RuntimeError):
+            with test_app.app_context():
+                get_db().execute("INSERT INTO projects (name) VALUES ('half-done')")
+                raise RuntimeError("boom")
+        conn = flask_app.get_db()
+        assert conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 0
+        conn.close()
+
+    def test_create_app_with_config(self, tmp_path):
+        from testmgr import create_app
+        app2 = create_app({
+            "DATABASE": str(tmp_path / "other.db"),
+            "UPLOAD_DIR": str(tmp_path / "up"),
+            "LOG_DIR": str(tmp_path / "logs"),
+            "CSRF_ENABLED": False,
+        })
+        assert os.path.exists(tmp_path / "other.db")
+        assert os.path.isdir(tmp_path / "up")
+        c = app2.test_client()
+        resp = c.post("/register", data={
+            "username": "u", "password": "p", "confirm_password": "p",
+        })
+        assert resp.status_code == 302
+        # a second app with the same log dir must not attach a duplicate handler
+        before = len(app2.logger.handlers)
+        create_app({"DATABASE": str(tmp_path / "other.db"),
+                    "UPLOAD_DIR": str(tmp_path / "up"),
+                    "LOG_DIR": str(tmp_path / "logs")})
+        assert len(app2.logger.handlers) == before
+
+    def test_not_found_messages(self, auth_client):
+        for url, text in [("/projects/9999", b"Project not found"),
+                          ("/attachments/9999", b"Attachment not found")]:
+            resp = auth_client.get(url)
+            assert resp.status_code == 404 and resp.data == text
+        resp = auth_client.post("/tests/9999/update", data={"description": "d", "steps": "s"})
+        assert resp.status_code == 404 and resp.data == b"Test not found"
+        resp = auth_client.post("/comments/9999/delete")
+        assert resp.status_code == 404 and resp.data == b"Comment not found"
+
+    def test_import_ignores_extra_columns(self, auth_client):
+        pid = get_project_id(auth_client)
+        csv_data = b"Description,Steps\nd1,s1,EXTRA,MORE\n"
+        resp = auth_client.post(f"/projects/{pid}/import",
+                                data={"file": (io.BytesIO(csv_data), "t.csv")},
+                                content_type="multipart/form-data", follow_redirects=True)
+        assert b"Imported 1 test(s)." in resp.data

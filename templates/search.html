@@ -4,7 +4,7 @@
 <h2>Search Tests</h2>
 
 <div class="card">
-    <form method="GET" action="{{ url_for('search') }}">
+    <form method="GET" action="{{ url_for('main.search') }}">
         <div class="btn-group">
             <input type="text" name="q" value="{{ q }}" placeholder="Search descriptions, steps, or output" autofocus style="margin-bottom: 0; flex: 1;">
             <button type="submit" class="btn btn-primary">Search</button>
@@ -26,7 +26,7 @@
                 {% else %}
                     <span class="badge badge-pending">Pending</span>
                 {% endif %}
-                <a href="{{ url_for('project_detail', project_id=test['project_id']) }}" style="margin-left: 8px; font-size: 0.85rem;">{{ test['project_name'] }}</a>
+                <a href="{{ url_for('projects.project_detail', project_id=test['project_id']) }}" style="margin-left: 8px; font-size: 0.85rem;">{{ test['project_name'] }}</a>
             </div>
         </div>
         <h3 style="font-size: 1rem; margin-bottom: 4px;">{{ test['description'] }}</h3>

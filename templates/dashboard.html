@@ -47,7 +47,7 @@
         <tbody>
             {% for p in project_stats %}
             <tr>
-                <td><a href="{{ url_for('project_detail', project_id=p['id']) }}">{{ p['name'] }}</a></td>
+                <td><a href="{{ url_for('projects.project_detail', project_id=p['id']) }}">{{ p['name'] }}</a></td>
                 <td>{{ p['test_count'] }}</td>
                 <td>{{ p['pass_count'] }}</td>
                 <td>{{ p['fail_count'] }}</td>
@@ -69,7 +69,7 @@
         {% for entry in recent %}
         <li style="margin-bottom: 8px; font-size: 0.9rem;">
             <strong>{{ entry['changed_by'] }}</strong> changed
-            <a href="{{ url_for('project_detail', project_id=entry['project_id']) }}">{{ entry['test_desc'] }}</a>
+            <a href="{{ url_for('projects.project_detail', project_id=entry['project_id']) }}">{{ entry['test_desc'] }}</a>
             from
             <span class="badge {{ 'badge-pass' if entry['old_status'] == 'Pass' else ('badge-fail' if entry['old_status'] == 'Fail' else 'badge-pending') }}">{{ entry['old_status'] or 'Pending' }}</span>
             to
