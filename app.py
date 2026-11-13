@@ -3,6 +3,8 @@ from flask import (
     send_from_directory, session, g, Response, flash,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+from urllib.parse import quote
 from logging.handlers import RotatingFileHandler
 from functools import wraps
 from datetime import datetime, timezone
@@ -72,7 +74,32 @@ app.logger.setLevel(logging.INFO)
 def get_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    # SQLite leaves FK enforcement (and ON DELETE CASCADE) off unless enabled per connection
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+STATUS_LABELS = {1: "Pass", 0: "Fail", None: "Pending"}
+
+
+def remove_attachment_files(conn, where_sql, params):
+    """Delete stored files for attachments matching the given WHERE clause."""
+    rows = conn.execute(
+        "SELECT a.stored_name FROM attachments a JOIN tests t ON a.test_id = t.id WHERE " + where_sql,
+        params,
+    ).fetchall()
+    for row in rows:
+        path = os.path.join(UPLOAD_DIR, row["stored_name"])
+        if os.path.exists(path):
+            os.remove(path)
+
+
+def download_response(body, mimetype, base_name, ext):
+    """Build a download Response with a Content-Disposition header safe for any name."""
+    ascii_name = secure_filename(base_name) or "project"
+    utf8_name = quote(base_name.replace(" ", "_") + ext, safe="")
+    disposition = f"attachment; filename=\"{ascii_name}{ext}\"; filename*=UTF-8''{utf8_name}"
+    return Response(body, mimetype=mimetype, headers={"Content-Disposition": disposition})
 
 
 def init_db():
@@ -482,29 +509,8 @@ def rename_project(project_id):
 @login_required
 def delete_project(project_id):
     conn = get_db()
-    # clean up attachment files
-    rows = conn.execute(
-        "SELECT a.stored_name FROM attachments a "
-        "JOIN tests t ON a.test_id = t.id WHERE t.project_id = ?", (project_id,)
-    ).fetchall()
-    for row in rows:
-        path = os.path.join(UPLOAD_DIR, row["stored_name"])
-        if os.path.exists(path):
-            os.remove(path)
-    conn.execute(
-        "DELETE FROM test_comments WHERE test_id IN "
-        "(SELECT id FROM tests WHERE project_id = ?)", (project_id,)
-    )
-    conn.execute(
-        "DELETE FROM test_history WHERE test_id IN "
-        "(SELECT id FROM tests WHERE project_id = ?)", (project_id,)
-    )
-    conn.execute(
-        "DELETE FROM attachments WHERE test_id IN "
-        "(SELECT id FROM tests WHERE project_id = ?)", (project_id,)
-    )
-    conn.execute("DELETE FROM tests WHERE project_id = ?", (project_id,))
-    project_name = conn.execute("SELECT name FROM projects WHERE id = ?", (project_id,)).fetchone()
+    remove_attachment_files(conn, "t.project_id = ?", (project_id,))
+    # tests, attachments, history and comments are removed by ON DELETE CASCADE
     conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
     conn.commit()
     conn.close()
@@ -618,12 +624,7 @@ def export_project(project_id):
                 test["output"], test["notes"], att_names, cmt_text,
             ])
         conn.close()
-        filename = project["name"].replace(" ", "_") + "_report.csv"
-        return Response(
-            si.getvalue(),
-            mimetype="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
+        return download_response(si.getvalue(), "text/csv", project["name"], "_report.csv")
 
     # Markdown export
     total = len(tests)
@@ -634,7 +635,9 @@ def export_project(project_id):
     lines = []
     lines.append(f"# {project['name']} — Test Report")
     lines.append("")
-    lines.append(f"**Generated:** {project['created_at']}  ")
+    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    lines.append(f"**Generated:** {generated}  ")
+    lines.append(f"**Project created:** {project['created_at']}  ")
     lines.append(f"**Exported by:** {g.user['username']}")
     lines.append("")
     lines.append("## Summary")
@@ -731,12 +734,7 @@ def export_project(project_id):
 
     conn.close()
     md = "\n".join(lines)
-    filename = project["name"].replace(" ", "_") + "_report.md"
-    return Response(
-        md,
-        mimetype="text/markdown",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
+    return download_response(md, "text/markdown", project["name"], "_report.md")
 
 
 @app.route("/projects/<int:project_id>/bulk", methods=["POST"])
@@ -756,39 +754,51 @@ def bulk_action(project_id):
     if not test_ids:
         conn.close()
         return redirect(url_for("project_detail", project_id=project_id))
+    # only ever act on tests that actually belong to this project
+    test_ids = [r["id"] for r in conn.execute(
+        f"SELECT id FROM tests WHERE id IN ({','.join('?' * len(test_ids))}) AND project_id = ?",
+        test_ids + [project_id],
+    ).fetchall()]
+    if not test_ids:
+        conn.close()
+        return redirect(url_for("project_detail", project_id=project_id))
     placeholders = ",".join("?" * len(test_ids))
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    status_map = {1: "Pass", 0: "Fail", None: "Pending"}
 
     if action in ("pass", "fail", "pending"):
         new_passed = {"pass": 1, "fail": 0, "pending": None}[action]
         tests = conn.execute(
-            f"SELECT id, passed FROM tests WHERE id IN ({placeholders}) AND project_id = ?",
-            test_ids + [project_id],
+            f"SELECT id, passed FROM tests WHERE id IN ({placeholders})", test_ids,
         ).fetchall()
-        changed = 0
+        # match single-test edits: only tests whose status actually changes get
+        # a history entry and a new executed_by / executed_at
+        changed_ids = [t["id"] for t in tests if t["passed"] != new_passed]
         for t in tests:
-            if t["passed"] != new_passed:
+            if t["id"] in changed_ids:
                 conn.execute(
                     "INSERT INTO test_history (test_id, old_status, new_status, changed_by) VALUES (?, ?, ?, ?)",
-                    (t["id"], status_map.get(t["passed"]), status_map.get(new_passed), g.user["username"]),
+                    (t["id"], STATUS_LABELS[t["passed"]], STATUS_LABELS[new_passed], g.user["username"]),
                 )
-                changed += 1
-        conn.execute(
-            f"UPDATE tests SET passed = ?, executed_by = ?, executed_at = ? "
-            f"WHERE id IN ({placeholders}) AND project_id = ?",
-            [new_passed, g.user["username"], now] + test_ids + [project_id],
-        )
+        if changed_ids:
+            conn.execute(
+                f"UPDATE tests SET passed = ?, executed_by = ?, executed_at = ? "
+                f"WHERE id IN ({','.join('?' * len(changed_ids))})",
+                [new_passed, g.user["username"], now] + changed_ids,
+            )
         conn.commit()
-        label = status_map[new_passed]
-        app.logger.info("Bulk %s: %d test(s) in project %s by %s", label, len(test_ids), project_id, g.user["username"])
-        flash("Marked %d test(s) as %s." % (len(test_ids), label))
+        label = STATUS_LABELS[new_passed]
+        unchanged = len(tests) - len(changed_ids)
+        app.logger.info("Bulk %s: %d test(s) in project %s by %s", label, len(changed_ids), project_id, g.user["username"])
+        msg = "Marked %d test(s) as %s." % (len(changed_ids), label)
+        if unchanged:
+            msg += " %d already %s." % (unchanged, label)
+        flash(msg)
 
     elif action == "assign":
         assign_to = request.form.get("assign_to", "")
         conn.execute(
-            f"UPDATE tests SET assigned_to = ? WHERE id IN ({placeholders}) AND project_id = ?",
-            [assign_to] + test_ids + [project_id],
+            f"UPDATE tests SET assigned_to = ? WHERE id IN ({placeholders})",
+            [assign_to] + test_ids,
         )
         conn.commit()
         label = assign_to or "Unassigned"
@@ -796,31 +806,9 @@ def bulk_action(project_id):
         flash("Assigned %d test(s) to %s." % (len(test_ids), label))
 
     elif action == "delete":
-        # only touch tests that actually belong to this project
-        test_ids = [r["id"] for r in conn.execute(
-            f"SELECT id FROM tests WHERE id IN ({placeholders}) AND project_id = ?",
-            test_ids + [project_id],
-        ).fetchall()]
-        if not test_ids:
-            conn.close()
-            return redirect(url_for("project_detail", project_id=project_id))
-        placeholders = ",".join("?" * len(test_ids))
-        # clean up attachment files
-        rows = conn.execute(
-            f"SELECT stored_name FROM attachments WHERE test_id IN ({placeholders})",
-            test_ids,
-        ).fetchall()
-        for row in rows:
-            path = os.path.join(UPLOAD_DIR, row["stored_name"])
-            if os.path.exists(path):
-                os.remove(path)
-        conn.execute(f"DELETE FROM test_comments WHERE test_id IN ({placeholders})", test_ids)
-        conn.execute(f"DELETE FROM test_history WHERE test_id IN ({placeholders})", test_ids)
-        conn.execute(f"DELETE FROM attachments WHERE test_id IN ({placeholders})", test_ids)
-        conn.execute(
-            f"DELETE FROM tests WHERE id IN ({placeholders}) AND project_id = ?",
-            test_ids + [project_id],
-        )
+        remove_attachment_files(conn, f"t.id IN ({placeholders})", test_ids)
+        # attachments, history and comments are removed by ON DELETE CASCADE
+        conn.execute(f"DELETE FROM tests WHERE id IN ({placeholders})", test_ids)
         conn.commit()
         app.logger.info("Bulk delete: %d test(s) in project %s by %s", len(test_ids), project_id, g.user["username"])
         flash("Deleted %d test(s)." % len(test_ids))
@@ -896,10 +884,17 @@ def import_tests(project_id):
 @app.route("/projects/<int:project_id>/tests", methods=["POST"])
 @login_required
 def create_test(project_id):
+    conn = get_db()
+    project = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+    if not project:
+        conn.close()
+        return "Project not found", 404
     description = request.form.get("description", "").strip()
     steps = request.form.get("steps", "").strip()
-    if description and steps:
-        conn = get_db()
+    if not (description and steps):
+        conn.close()
+        flash("Description and steps are required.")
+    else:
         max_order = conn.execute(
             "SELECT COALESCE(MAX(sort_order), -1) FROM tests WHERE project_id = ?", (project_id,)
         ).fetchone()[0]
@@ -959,6 +954,10 @@ def update_test(test_id):
 
     description = request.form.get("description", "").strip()
     steps = request.form.get("steps", "").strip()
+    if not (description and steps):
+        conn.close()
+        flash("Description and steps are required. Changes were not saved.")
+        return redirect(url_for("project_detail", project_id=test["project_id"]))
     output = request.form.get("output", "")
     notes = request.form.get("notes", "")
     assigned_to = request.form.get("assigned_to", "")
@@ -978,10 +977,9 @@ def update_test(test_id):
         executed_by = g.user["username"]
         executed_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         # record history
-        status_map = {1: "Pass", 0: "Fail", None: "Pending"}
         conn.execute(
             "INSERT INTO test_history (test_id, old_status, new_status, changed_by) VALUES (?, ?, ?, ?)",
-            (test_id, status_map.get(test["passed"]), status_map.get(passed), g.user["username"]),
+            (test_id, STATUS_LABELS[test["passed"]], STATUS_LABELS[passed], g.user["username"]),
         )
 
     conn.execute(
@@ -992,10 +990,9 @@ def update_test(test_id):
     project_id = test["project_id"]
     conn.close()
     if passed != test["passed"]:
-        status_labels = {1: "Pass", 0: "Fail", None: "Pending"}
         app.logger.info("Test status changed: id=%s %s->%s by %s", test_id,
-                        status_labels.get(test["passed"]), status_labels.get(passed), g.user["username"])
-        flash("Test saved. Status changed to %s." % status_labels.get(passed))
+                        STATUS_LABELS[test["passed"]], STATUS_LABELS[passed], g.user["username"])
+        flash("Test saved. Status changed to %s." % STATUS_LABELS[passed])
     else:
         app.logger.info("Test updated: id=%s by %s", test_id, g.user["username"])
         flash("Test saved.")
@@ -1034,15 +1031,8 @@ def delete_test(test_id):
         conn.close()
         return "Test not found", 404
     project_id = test["project_id"]
-    # clean up attachment files
-    rows = conn.execute("SELECT stored_name FROM attachments WHERE test_id = ?", (test_id,)).fetchall()
-    for row in rows:
-        path = os.path.join(UPLOAD_DIR, row["stored_name"])
-        if os.path.exists(path):
-            os.remove(path)
-    conn.execute("DELETE FROM test_comments WHERE test_id = ?", (test_id,))
-    conn.execute("DELETE FROM test_history WHERE test_id = ?", (test_id,))
-    conn.execute("DELETE FROM attachments WHERE test_id = ?", (test_id,))
+    remove_attachment_files(conn, "t.id = ?", (test_id,))
+    # attachments, history and comments are removed by ON DELETE CASCADE
     conn.execute("DELETE FROM tests WHERE id = ?", (test_id,))
     conn.commit()
     conn.close()

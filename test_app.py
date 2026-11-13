@@ -1506,3 +1506,118 @@ class TestSecurity:
             assert "/login" in resp.headers["Location"]
         with client.session_transaction() as sess:
             assert "user_id" not in sess
+
+
+# ============================================================
+# 22. Correctness fixes
+# ============================================================
+
+class TestCorrectnessFixes:
+    def test_foreign_keys_enabled(self, test_app):
+        conn = flask_app.get_db()
+        assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        conn.close()
+
+    def test_create_test_in_missing_project_404(self, auth_client):
+        resp = auth_client.post("/projects/9999/tests", data={
+            "description": "orphan", "steps": "s",
+        })
+        assert resp.status_code == 404
+        conn = flask_app.get_db()
+        assert conn.execute("SELECT COUNT(*) FROM tests").fetchone()[0] == 0
+        conn.close()
+
+    def test_create_test_requires_fields_flash(self, auth_client):
+        pid = get_project_id(auth_client)
+        resp = create_test_case(auth_client, pid, description="  ", steps="s")
+        assert b"Description and steps are required." in resp.data
+
+    def test_delete_project_cascades_comments_and_history(self, auth_client):
+        pid = get_project_id(auth_client)
+        tid = get_test_id(auth_client, pid)
+        auth_client.post(f"/tests/{tid}/comments", data={"body": "hi"})
+        auth_client.post(f"/tests/{tid}/update", data={
+            "description": "d", "steps": "s", "passed": "0",
+        })
+        auth_client.post(f"/projects/{pid}/delete")
+        conn = flask_app.get_db()
+        for table in ("tests", "test_comments", "test_history", "attachments"):
+            assert conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] == 0, table
+        conn.close()
+
+    def test_markdown_export_generated_is_now(self, auth_client):
+        from datetime import datetime, timezone
+        pid = get_project_id(auth_client)
+        conn = flask_app.get_db()
+        conn.execute("UPDATE projects SET created_at = '2001-01-01 00:00:00' WHERE id = ?", (pid,))
+        conn.commit()
+        conn.close()
+        body = auth_client.get(f"/projects/{pid}/export").data.decode()
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        assert f"**Generated:** {today}" in body
+        assert "**Project created:** 2001-01-01 00:00:00" in body
+
+    @pytest.mark.parametrize("field", ["description", "steps"])
+    def test_update_rejects_blank_fields(self, auth_client, field):
+        pid = get_project_id(auth_client)
+        tid = get_test_id(auth_client, pid)
+        data = {"description": "New desc", "steps": "New steps", "passed": "1"}
+        data[field] = "   "
+        resp = auth_client.post(f"/tests/{tid}/update", data=data, follow_redirects=True)
+        assert b"Changes were not saved" in resp.data
+        conn = flask_app.get_db()
+        t = conn.execute("SELECT * FROM tests WHERE id = ?", (tid,)).fetchone()
+        assert conn.execute("SELECT COUNT(*) FROM test_history").fetchone()[0] == 0
+        conn.close()
+        assert t["description"] == "Test Case 1"
+        assert t["steps"] == "Step 1"
+        assert t["passed"] is None
+
+    def test_bulk_status_only_touches_changed_tests(self, auth_client):
+        pid = get_project_id(auth_client)
+        t1 = get_test_id(auth_client, pid)
+        t2 = get_test_id(auth_client, pid)
+        conn = flask_app.get_db()
+        conn.execute(
+            "UPDATE tests SET passed = 1, executed_by = 'someone', executed_at = '2001-01-01 00:00:00' WHERE id = ?",
+            (t1,),
+        )
+        conn.commit()
+        conn.close()
+        resp = auth_client.post(f"/projects/{pid}/bulk", data={
+            "test_ids": f"{t1},{t2},99999", "action": "pass",
+        }, follow_redirects=True)
+        assert b"Marked 1 test(s) as Pass. 1 already Pass." in resp.data
+        conn = flask_app.get_db()
+        r1 = conn.execute("SELECT * FROM tests WHERE id = ?", (t1,)).fetchone()
+        r2 = conn.execute("SELECT * FROM tests WHERE id = ?", (t2,)).fetchone()
+        hist = conn.execute("SELECT test_id FROM test_history").fetchall()
+        conn.close()
+        assert (r1["executed_by"], r1["executed_at"]) == ("someone", "2001-01-01 00:00:00")
+        assert r2["passed"] == 1 and r2["executed_by"] == "admin"
+        assert [h["test_id"] for h in hist] == [t2]
+
+    def test_bulk_assign_counts_only_project_tests(self, auth_client):
+        pid = get_project_id(auth_client)
+        tid = get_test_id(auth_client, pid)
+        resp = auth_client.post(f"/projects/{pid}/bulk", data={
+            "test_ids": f"{tid},99999", "action": "assign", "assign_to": "admin",
+        }, follow_redirects=True)
+        assert b"Assigned 1 test(s) to admin." in resp.data
+
+    @pytest.mark.parametrize("fmt", ["markdown", "csv"])
+    def test_export_filename_with_quotes_and_unicode(self, auth_client, fmt):
+        from urllib.parse import unquote
+        create_project(auth_client, name='Ünïcode "Quoted" Tést')
+        conn = flask_app.get_db()
+        pid = conn.execute("SELECT id FROM projects").fetchone()["id"]
+        conn.close()
+        resp = auth_client.get(f"/projects/{pid}/export?format={fmt}")
+        assert resp.status_code == 200
+        cd = resp.headers["Content-Disposition"]
+        cd.encode("latin-1")  # must be a valid header value
+        ascii_part = cd.split('filename="')[1].split('"')[0]
+        assert '"' not in ascii_part and ascii_part.isascii()
+        ext = "_report.md" if fmt == "markdown" else "_report.csv"
+        utf8_part = cd.split("filename*=UTF-8''")[1]
+        assert unquote(utf8_part) == 'Ünïcode_"Quoted"_Tést' + ext
